@@ -1,0 +1,27 @@
+{
+  "name": "ralph-agent",
+  "version": "1.0.0",
+  "description": "Ralph agent that polls for and executes coding jobs via Claude CLI",
+  "main": "src/index.js",
+  "bin": {
+    "ralph-agent": "./bin/ralph-agent.js"
+  },
+  "scripts": {
+    "start": "node bin/ralph-agent.js"
+  },
+  "keywords": [
+    "ralph",
+    "agent",
+    "claude",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
