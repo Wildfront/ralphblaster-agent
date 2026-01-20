@@ -156,7 +156,7 @@ class Executor {
 
       const claude = spawn('claude', [`/${skill}`], {
         cwd: cwd,
-        shell: true,
+        shell: false,  // FIXED: Don't use shell
         env: process.env
       });
 
@@ -209,11 +209,16 @@ class Executor {
     return new Promise((resolve, reject) => {
       logger.debug('Starting Claude CLI execution');
 
-      const claude = spawn('claude', ['--print', prompt], {
+      // Use stdin to pass prompt - avoids shell injection
+      const claude = spawn('claude', [], {
         cwd: cwd,
-        shell: true,
+        shell: false,  // FIXED: Don't use shell
         env: process.env
       });
+
+      // Send prompt via stdin (safe from injection)
+      claude.stdin.write(prompt);
+      claude.stdin.end();
 
       let stdout = '';
       let stderr = '';
