@@ -4,6 +4,10 @@ const path = require('path');
 const logger = require('./logger');
 
 class Executor {
+  constructor() {
+    this.currentProcess = null; // Track current spawned process for cleanup
+  }
+
   /**
    * Execute a job using Claude CLI
    * @param {Object} job - Job object from API
@@ -35,30 +39,30 @@ class Executor {
   async executePrdGeneration(job, onProgress, startTime) {
     logger.info(`Generating PRD for: ${job.task_title}`);
 
-    // Build prompt for PRD generation
-    let prompt = `Generate a detailed Product Requirements Document (PRD) for the following feature request.\n\n`;
-    prompt += `Task: ${job.task_title}\n\n`;
-
-    if (job.task_description) {
-      prompt += `Description:\n${job.task_description}\n\n`;
+    // Use server-provided prompt if available, otherwise fall back to client-side
+    let prompt;
+    if (job.prompt && job.prompt.trim()) {
+      prompt = job.prompt;
+      logger.debug('Using server-provided prompt');
+    } else {
+      logger.warn('No server prompt provided, using client-side prompt (deprecated)');
+      prompt = this.buildPrdPrompt(job);
     }
-
-    if (job.project?.name) {
-      prompt += `Project: ${job.project.name}\n\n`;
-    }
-
-    prompt += `Include these sections:\n`;
-    prompt += `- Overview\n`;
-    prompt += `- User Stories\n`;
-    prompt += `- Functional Requirements\n`;
-    prompt += `- Technical Requirements (if applicable)\n`;
-    prompt += `- Success Metrics\n`;
-    prompt += `- Out of Scope\n\n`;
-    prompt += `Format the PRD in markdown.\n`;
 
     try {
+      // Determine and sanitize working directory
+      let workingDir = process.cwd();
+      if (job.project?.system_path) {
+        const sanitizedPath = this.validateAndSanitizePath(job.project.system_path);
+        if (sanitizedPath && fs.existsSync(sanitizedPath)) {
+          workingDir = sanitizedPath;
+        } else {
+          logger.warn(`Invalid or missing project path, using current directory: ${process.cwd()}`);
+        }
+      }
+
       // Use Claude /prd skill
-      const output = await this.runClaudeSkill('prd', prompt, job.project?.system_path || process.cwd(), onProgress);
+      const output = await this.runClaudeSkill('prd', prompt, workingDir, onProgress);
 
       const executionTimeMs = Date.now() - startTime;
 
@@ -83,17 +87,30 @@ class Executor {
   async executeCodeImplementation(job, onProgress, startTime) {
     logger.info(`Implementing code in ${job.project.system_path}`);
 
-    // Validate project path exists
-    if (!job.project.system_path || !fs.existsSync(job.project.system_path)) {
-      throw new Error(`Project path does not exist: ${job.project.system_path}`);
+    // Validate and sanitize project path
+    const sanitizedPath = this.validateAndSanitizePath(job.project.system_path);
+    if (!sanitizedPath) {
+      throw new Error(`Invalid or unsafe project path: ${job.project.system_path}`);
     }
 
-    // Build the prompt
-    const prompt = this.buildCodePrompt(job);
+    // Validate project path exists
+    if (!fs.existsSync(sanitizedPath)) {
+      throw new Error(`Project path does not exist: ${sanitizedPath}`);
+    }
+
+    // Use server-provided prompt if available
+    let prompt;
+    if (job.prompt && job.prompt.trim()) {
+      prompt = job.prompt;
+      logger.debug('Using server-provided prompt');
+    } else {
+      logger.warn('No server prompt provided, using client-side prompt (deprecated)');
+      prompt = this.buildCodePrompt(job);
+    }
 
     try {
       // Execute claude --print with the prompt
-      const output = await this.runClaude(prompt, job.project.system_path, onProgress);
+      const output = await this.runClaude(prompt, sanitizedPath, onProgress);
 
       // Parse output for summary and branch name
       const result = this.parseOutput(output);
@@ -113,7 +130,36 @@ class Executor {
   }
 
   /**
-   * Build Claude prompt for code implementation
+   * Build Claude prompt for PRD generation (fallback)
+   * @param {Object} job - Job object
+   * @returns {string} Prompt text
+   */
+  buildPrdPrompt(job) {
+    let prompt = `Generate a detailed Product Requirements Document (PRD) for the following feature request.\n\n`;
+    prompt += `Task: ${job.task_title}\n\n`;
+
+    if (job.task_description) {
+      prompt += `Description:\n${job.task_description}\n\n`;
+    }
+
+    if (job.project?.name) {
+      prompt += `Project: ${job.project.name}\n\n`;
+    }
+
+    prompt += `Include these sections:\n`;
+    prompt += `- Overview\n`;
+    prompt += `- User Stories\n`;
+    prompt += `- Functional Requirements\n`;
+    prompt += `- Technical Requirements (if applicable)\n`;
+    prompt += `- Success Metrics\n`;
+    prompt += `- Out of Scope\n\n`;
+    prompt += `Format the PRD in markdown.\n`;
+
+    return prompt;
+  }
+
+  /**
+   * Build Claude prompt for code implementation (fallback)
    * @param {Object} job - Job object
    * @returns {string} Prompt text
    */
@@ -160,6 +206,9 @@ class Executor {
         env: process.env
       });
 
+      // Track process for shutdown cleanup
+      this.currentProcess = claude;
+
       // Send prompt to stdin
       claude.stdin.write(prompt);
       claude.stdin.end();
@@ -182,6 +231,7 @@ class Executor {
       });
 
       claude.on('close', (code) => {
+        this.currentProcess = null; // Clear process reference
         if (code === 0) {
           logger.debug(`Claude skill /${skill} completed successfully`);
           resolve(stdout);
@@ -192,6 +242,7 @@ class Executor {
       });
 
       claude.on('error', (error) => {
+        this.currentProcess = null; // Clear process reference
         logger.error(`Failed to spawn Claude skill /${skill}`, error.message);
         reject(new Error(`Failed to execute Claude skill /${skill}: ${error.message}`));
       });
@@ -216,6 +267,9 @@ class Executor {
         env: process.env
       });
 
+      // Track process for shutdown cleanup
+      this.currentProcess = claude;
+
       // Send prompt via stdin (safe from injection)
       claude.stdin.write(prompt);
       claude.stdin.end();
@@ -239,6 +293,7 @@ class Executor {
       });
 
       claude.on('close', (code) => {
+        this.currentProcess = null; // Clear process reference
         if (code === 0) {
           logger.debug('Claude CLI execution completed successfully');
           resolve(stdout);
@@ -249,6 +304,7 @@ class Executor {
       });
 
       claude.on('error', (error) => {
+        this.currentProcess = null; // Clear process reference
         logger.error('Failed to spawn Claude CLI', error.message);
         reject(new Error(`Failed to execute Claude CLI: ${error.message}`));
       });
@@ -279,6 +335,67 @@ class Executor {
     }
 
     return result;
+  }
+
+  /**
+   * Kill the current running process if any
+   * Used during shutdown to prevent orphaned processes
+   */
+  killCurrentProcess() {
+    if (this.currentProcess && !this.currentProcess.killed) {
+      logger.warn('Killing current Claude process due to shutdown');
+      try {
+        this.currentProcess.kill('SIGTERM');
+        // Give it a moment, then force kill if still alive
+        setTimeout(() => {
+          if (this.currentProcess && !this.currentProcess.killed) {
+            logger.warn('Force killing Claude process with SIGKILL');
+            this.currentProcess.kill('SIGKILL');
+          }
+        }, 2000); // 2 second grace period
+      } catch (error) {
+        logger.error('Error killing Claude process', error.message);
+      }
+    }
+  }
+
+  /**
+   * Validate and sanitize file system path to prevent directory traversal attacks
+   * @param {string} userPath - Path provided by user/API
+   * @returns {string|null} Sanitized absolute path or null if invalid
+   */
+  validateAndSanitizePath(userPath) {
+    if (!userPath || typeof userPath !== 'string') {
+      logger.warn('Path is empty or not a string');
+      return null;
+    }
+
+    try {
+      // Resolve to absolute path and normalize (removes .., ., etc.)
+      const resolvedPath = path.resolve(userPath);
+
+      // Check for null bytes (path traversal attack vector)
+      if (resolvedPath.includes('\0')) {
+        logger.error('Path contains null bytes (potential attack)');
+        return null;
+      }
+
+      // Additional check: ensure the resolved path doesn't escape to system directories
+      // This is a basic sanity check - adjust based on your security requirements
+      const dangerousPaths = ['/etc', '/bin', '/sbin', '/usr/bin', '/usr/sbin', '/System', '/Windows'];
+      for (const dangerousPath of dangerousPaths) {
+        if (resolvedPath === dangerousPath || resolvedPath.startsWith(dangerousPath + '/')) {
+          logger.error(`Path points to protected system directory: ${resolvedPath}`);
+          return null;
+        }
+      }
+
+      logger.debug(`Path sanitized: ${userPath} -> ${resolvedPath}`);
+      return resolvedPath;
+    } catch (error) {
+      logger.error('Error sanitizing path', error.message);
+      return null;
+    }
   }
 }
 
