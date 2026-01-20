@@ -31,8 +31,17 @@ class ApiClient {
       }
 
       if (response.data && response.data.success) {
-        logger.info(`Claimed job #${response.data.job.id} - ${response.data.job.task_title}`);
-        return response.data.job;
+        const job = response.data.job;
+
+        // Validate job object
+        const validationError = this.validateJob(job);
+        if (validationError) {
+          logger.error(`Invalid job received from API: ${validationError}`);
+          return null;
+        }
+
+        logger.info(`Claimed job #${job.id} - ${job.task_title}`);
+        return job;
       }
 
       logger.warn('Unexpected response from API', response.data);
@@ -155,6 +164,68 @@ class ApiClient {
     } catch (error) {
       logger.warn(`Error sending progress for job #${jobId}`, error.message);
     }
+  }
+
+  /**
+   * Validate job object from API
+   * @param {Object} job - Job object to validate
+   * @returns {string|null} Error message if invalid, null if valid
+   */
+  validateJob(job) {
+    // Basic structure validation
+    if (!job || typeof job !== 'object') {
+      return 'Job is null or not an object';
+    }
+
+    // Required fields
+    if (typeof job.id !== 'number' || job.id <= 0) {
+      return 'Job ID is missing or invalid';
+    }
+
+    if (typeof job.job_type !== 'string' || !job.job_type.trim()) {
+      return 'Job type is missing or invalid';
+    }
+
+    // Validate job_type is one of the known types
+    const validJobTypes = ['prd_generation', 'code_execution'];
+    if (!validJobTypes.includes(job.job_type)) {
+      return `Unknown job type: ${job.job_type}`;
+    }
+
+    if (typeof job.task_title !== 'string' || !job.task_title.trim()) {
+      return 'Task title is missing or invalid';
+    }
+
+    // Validate prompt if present (can be null/empty for legacy clients)
+    if (job.prompt !== null && job.prompt !== undefined && typeof job.prompt !== 'string') {
+      return 'Prompt must be a string or null';
+    }
+
+    // For code_execution jobs, validate project
+    if (job.job_type === 'code_execution') {
+      if (!job.project || typeof job.project !== 'object') {
+        return 'Project object is required for code_execution jobs';
+      }
+
+      if (typeof job.project.system_path !== 'string' || !job.project.system_path.trim()) {
+        return 'Project system_path is missing or invalid';
+      }
+    }
+
+    // For prd_generation jobs, validate project if present
+    if (job.job_type === 'prd_generation' && job.project) {
+      if (typeof job.project !== 'object') {
+        return 'Project must be an object if provided';
+      }
+
+      if (job.project.system_path !== null &&
+          job.project.system_path !== undefined &&
+          typeof job.project.system_path !== 'string') {
+        return 'Project system_path must be a string if provided';
+      }
+    }
+
+    return null; // Valid
   }
 }
 
