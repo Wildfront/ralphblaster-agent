@@ -1,6 +1,10 @@
 const axios = require('axios');
 const config = require('./config');
 const logger = require('./logger');
+const packageJson = require('../package.json');
+
+// Agent version from package.json
+const AGENT_VERSION = packageJson.version;
 
 // Timeout constants
 const LONG_POLLING_TIMEOUT_MS = 65000; // 65s for long polling (server max 60s + buffer)
@@ -19,6 +23,7 @@ class ApiClient {
     // Add Authorization header via interceptor to prevent token exposure in logs
     this.client.interceptors.request.use((requestConfig) => {
       requestConfig.headers.Authorization = `Bearer ${config.apiToken}`;
+      requestConfig.headers['X-Agent-Version'] = AGENT_VERSION;
       return requestConfig;
     });
 
@@ -182,17 +187,31 @@ class ApiClient {
   /**
    * Update job status to failed
    * @param {number} jobId - Job ID
-   * @param {string} errorMessage - Error message
+   * @param {Error|string} error - Error object or error message
    * @param {string} partialOutput - Partial output if any
    */
-  async markJobFailed(jobId, errorMessage, partialOutput = null) {
+  async markJobFailed(jobId, error, partialOutput = null) {
     try {
-      await this.client.patch(`/api/v1/ralph/jobs/${jobId}`, {
+      // Support both Error objects and string messages for backward compatibility
+      const errorMessage = typeof error === 'string' ? error : error.message || String(error);
+      const payload = {
         status: 'failed',
         error: errorMessage,
-        output: partialOutput
-      });
-      logger.info(`Job #${jobId} marked as failed`);
+        output: partialOutput || error.partialOutput || null
+      };
+
+      // Add error categorization if available (from enriched Error objects)
+      if (typeof error === 'object' && error !== null) {
+        if (error.category) {
+          payload.error_category = error.category;
+        }
+        if (error.technicalDetails) {
+          payload.error_details = error.technicalDetails;
+        }
+      }
+
+      await this.client.patch(`/api/v1/ralph/jobs/${jobId}`, payload);
+      logger.info(`Job #${jobId} marked as failed with category: ${payload.error_category || 'unknown'}`);
     } catch (error) {
       logger.error(`Error marking job #${jobId} as failed`, error.message);
       // Don't throw - we want to continue even if this fails
