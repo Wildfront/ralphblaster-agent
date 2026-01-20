@@ -2,7 +2,17 @@
   "permissions": {
     "allow": [
       "Bash(npm install)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(npm install:*)",
+      "Bash(npm audit:*)",
+      "Bash(test:*)",
+      "Bash(npm test)",
+      "Bash(npm view:*)",
+      "Bash(npm run test:coverage:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm test:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
