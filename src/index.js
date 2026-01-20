@@ -36,23 +36,31 @@ class RalphAgent {
     logger.info('Ralph Agent stopping...');
     this.isRunning = false;
 
-    // Stop heartbeat
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
+    // Stop heartbeat first to prevent updates during shutdown
+    this.stopHeartbeat();
+
+    // Kill any running Claude process
+    if (this.executor.currentProcess) {
+      logger.warn('Terminating running Claude process');
+      this.executor.killCurrentProcess();
     }
 
     // If currently executing a job, mark it as failed
     if (this.currentJob) {
       logger.warn(`Marking job #${this.currentJob.id} as failed due to shutdown`);
-      await this.apiClient.markJobFailed(
-        this.currentJob.id,
-        'Agent shutdown during execution'
-      );
+      try {
+        await this.apiClient.markJobFailed(
+          this.currentJob.id,
+          'Agent shutdown during execution'
+        );
+      } catch (error) {
+        logger.error('Failed to mark job as failed during shutdown', error.message);
+      }
     }
 
     logger.info('Ralph Agent stopped');
-    process.exit(0);
+    // Give async operations time to complete before exiting
+    setTimeout(() => process.exit(0), 500);
   }
 
   /**
@@ -105,7 +113,7 @@ class RalphAgent {
         }
       });
 
-      // Stop heartbeat
+      // Stop heartbeat before updating job status to prevent race conditions
       this.stopHeartbeat();
 
       // Mark job as completed
@@ -113,7 +121,7 @@ class RalphAgent {
 
       logger.info(`Job #${job.id} completed successfully`);
     } catch (error) {
-      // Stop heartbeat
+      // Stop heartbeat before updating job status to prevent race conditions
       this.stopHeartbeat();
 
       // Mark job as failed
@@ -125,6 +133,7 @@ class RalphAgent {
 
       logger.error(`Job #${job.id} failed`, error.message);
     } finally {
+      // Clear current job reference
       this.currentJob = null;
     }
   }
