@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const config = {
   // API configuration
-  apiUrl: process.env.RALPH_API_URL || 'https://ralphblaster.com',
+  apiUrl: process.env.RALPH_API_URL || 'https://app.ralphblaster.com',
   apiToken: process.env.RALPH_API_TOKEN,
 
   // Execution configuration
