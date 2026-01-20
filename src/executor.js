@@ -257,22 +257,59 @@ class Executor {
   }
 
   /**
+   * Get sanitized environment variables for Claude execution
+   * @returns {Object} Sanitized environment object
+   */
+  getSanitizedEnv() {
+    const safeEnv = {};
+
+    // Only copy necessary environment variables
+    const allowedVars = [
+      'PATH',
+      'HOME',
+      'USER',
+      'LANG',
+      'LC_ALL',
+      'TERM',
+      'TMPDIR',
+      'SHELL'
+    ];
+
+    for (const key of allowedVars) {
+      if (process.env[key]) {
+        safeEnv[key] = process.env[key];
+      }
+    }
+
+    logger.debug(`Sanitized environment: ${Object.keys(safeEnv).join(', ')}`);
+    return safeEnv;
+  }
+
+  /**
    * Run Claude CLI skill (e.g., /prd)
    * @param {string} skill - Skill name (without /)
    * @param {string} prompt - Input for the skill
    * @param {string} cwd - Working directory
    * @param {Function} onProgress - Progress callback
+   * @param {number} timeout - Timeout in milliseconds (default: 1 hour)
    * @returns {Promise<string>} Command output
    */
-  runClaudeSkill(skill, prompt, cwd, onProgress) {
+  runClaudeSkill(skill, prompt, cwd, onProgress, timeout = 3600000) {
     return new Promise((resolve, reject) => {
-      logger.debug(`Running Claude skill: /${skill}`);
+      logger.debug(`Running Claude skill: /${skill} with timeout: ${timeout}ms`);
 
       const claude = spawn('claude', [`/${skill}`], {
         cwd: cwd,
         shell: false,  // FIXED: Don't use shell
-        env: process.env
+        env: this.getSanitizedEnv()
       });
+
+      // Set timeout
+      const timer = setTimeout(() => {
+        logger.error(`Claude skill /${skill} timed out after ${timeout}ms`);
+        claude.kill('SIGTERM');
+        reject(new Error(`Claude skill /${skill} execution timed out after ${timeout}ms`));
+      }, timeout);
 
       // Track process for shutdown cleanup
       this.currentProcess = claude;
@@ -299,6 +336,7 @@ class Executor {
       });
 
       claude.on('close', (code) => {
+        clearTimeout(timer); // Clear timeout
         this.currentProcess = null; // Clear process reference
         if (code === 0) {
           logger.debug(`Claude skill /${skill} completed successfully`);
@@ -310,6 +348,7 @@ class Executor {
       });
 
       claude.on('error', (error) => {
+        clearTimeout(timer); // Clear timeout
         this.currentProcess = null; // Clear process reference
         logger.error(`Failed to spawn Claude skill /${skill}`, error.message);
         reject(new Error(`Failed to execute Claude skill /${skill}: ${error.message}`));
@@ -322,18 +361,26 @@ class Executor {
    * @param {string} prompt - Prompt text
    * @param {string} cwd - Working directory
    * @param {Function} onProgress - Progress callback
+   * @param {number} timeout - Timeout in milliseconds (default: 2 hours for code execution)
    * @returns {Promise<string>} Command output
    */
-  runClaude(prompt, cwd, onProgress) {
+  runClaude(prompt, cwd, onProgress, timeout = 7200000) {
     return new Promise((resolve, reject) => {
-      logger.debug('Starting Claude CLI execution');
+      logger.debug(`Starting Claude CLI execution with timeout: ${timeout}ms`);
 
       // Use stdin to pass prompt - avoids shell injection
       const claude = spawn('claude', [], {
         cwd: cwd,
         shell: false,  // FIXED: Don't use shell
-        env: process.env
+        env: this.getSanitizedEnv()
       });
+
+      // Set timeout
+      const timer = setTimeout(() => {
+        logger.error(`Claude CLI timed out after ${timeout}ms`);
+        claude.kill('SIGTERM');
+        reject(new Error(`Claude CLI execution timed out after ${timeout}ms`));
+      }, timeout);
 
       // Track process for shutdown cleanup
       this.currentProcess = claude;
@@ -361,6 +408,7 @@ class Executor {
       });
 
       claude.on('close', (code) => {
+        clearTimeout(timer); // Clear timeout
         this.currentProcess = null; // Clear process reference
         if (code === 0) {
           logger.debug('Claude CLI execution completed successfully');
@@ -372,6 +420,7 @@ class Executor {
       });
 
       claude.on('error', (error) => {
+        clearTimeout(timer); // Clear timeout
         this.currentProcess = null; // Clear process reference
         logger.error('Failed to spawn Claude CLI', error.message);
         reject(new Error(`Failed to execute Claude CLI: ${error.message}`));
