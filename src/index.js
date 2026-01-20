@@ -162,10 +162,10 @@ class RalphAgent {
       this.jobCompleting = true;
       this.stopHeartbeat();
 
-      // Mark job as failed
+      // Mark job as failed (pass full error object to include categorization)
       await this.apiClient.markJobFailed(
         job.id,
-        error.message,
+        error,  // Pass full error object instead of just message
         error.partialOutput || null
       );
 
