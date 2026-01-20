@@ -11,11 +11,32 @@ class ApiClient {
     this.client = axios.create({
       baseURL: config.apiUrl,
       headers: {
-        'Authorization': `Bearer ${config.apiToken}`,
         'Content-Type': 'application/json'
       },
       timeout: REGULAR_API_TIMEOUT_MS
     });
+
+    // Add Authorization header via interceptor to prevent token exposure in logs
+    this.client.interceptors.request.use((requestConfig) => {
+      requestConfig.headers.Authorization = `Bearer ${config.apiToken}`;
+      return requestConfig;
+    });
+
+    // Sanitize errors to prevent token leakage in stack traces
+    this.client.interceptors.response.use(
+      response => response,
+      error => {
+        // Remove auth header from error config before it gets logged
+        if (error.config && error.config.headers) {
+          error.config.headers.Authorization = 'Bearer [REDACTED]';
+        }
+        // Also redact from response config if present
+        if (error.response && error.response.config && error.response.config.headers) {
+          error.response.config.headers.Authorization = 'Bearer [REDACTED]';
+        }
+        return Promise.reject(error);
+      }
+    );
   }
 
   /**
@@ -46,6 +67,20 @@ class ApiClient {
         }
 
         logger.info(`Claimed job #${job.id} - ${job.task_title}`);
+
+        // Log full job details for debugging (especially useful in multi-agent scenarios)
+        logger.debug('Job details:', {
+          id: job.id,
+          job_type: job.job_type,
+          task_title: job.task_title,
+          created_at: job.created_at,
+          user_id: job.user_id,
+          project_id: job.project?.id,
+          project_name: job.project?.name,
+          has_prompt: !!job.prompt,
+          prompt_length: job.prompt?.length || 0
+        });
+
         return job;
       }
 
@@ -89,6 +124,25 @@ class ApiClient {
   }
 
   /**
+   * Validate and truncate output to prevent excessive data transmission
+   * @param {string} output - Output string to validate
+   * @param {number} maxSize - Maximum size in bytes (default 10MB)
+   * @returns {string} Validated/truncated output
+   */
+  validateOutput(output, maxSize = 10 * 1024 * 1024) {
+    if (typeof output !== 'string') {
+      return '';
+    }
+
+    if (output.length > maxSize) {
+      logger.warn(`Output truncated from ${output.length} to ${maxSize} bytes`);
+      return output.substring(0, maxSize) + '\n\n[OUTPUT TRUNCATED - EXCEEDED MAX SIZE]';
+    }
+
+    return output;
+  }
+
+  /**
    * Update job status to completed
    * @param {number} jobId - Job ID
    * @param {Object} result - Job result containing output, summary, etc.
@@ -97,19 +151,24 @@ class ApiClient {
     try {
       const payload = {
         status: 'completed',
-        output: result.output,
+        output: this.validateOutput(result.output || ''),
         execution_time_ms: result.executionTimeMs
       };
 
-      // Add job-type specific fields
+      // Add job-type specific fields with validation
       if (result.prdContent) {
-        payload.prd_content = result.prdContent;
+        payload.prd_content = this.validateOutput(result.prdContent);
       }
       if (result.summary) {
-        payload.summary = result.summary;
+        payload.summary = this.validateOutput(result.summary, 10000); // 10KB max for summary
       }
       if (result.branchName) {
-        payload.branch_name = result.branchName;
+        // Validate branch name format
+        if (!/^[a-zA-Z0-9/_-]{1,200}$/.test(result.branchName)) {
+          logger.warn('Invalid branch name format, omitting from payload');
+        } else {
+          payload.branch_name = result.branchName;
+        }
       }
 
       await this.client.patch(`/api/v1/ralph/jobs/${jobId}`, payload);
@@ -147,7 +206,8 @@ class ApiClient {
   async sendHeartbeat(jobId) {
     try {
       await this.client.patch(`/api/v1/ralph/jobs/${jobId}`, {
-        status: 'running'
+        status: 'running',
+        heartbeat: true  // Distinguish from initial markJobRunning call
       });
       logger.debug(`Heartbeat sent for job #${jobId}`);
     } catch (error) {

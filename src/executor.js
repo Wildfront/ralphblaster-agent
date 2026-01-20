@@ -33,6 +33,53 @@ class Executor {
   }
 
   /**
+   * Validate prompt to prevent injection attacks
+   * @param {string} prompt - Prompt to validate
+   * @throws {Error} If prompt contains dangerous content
+   */
+  validatePrompt(prompt) {
+    if (!prompt || typeof prompt !== 'string') {
+      throw new Error('Prompt must be a non-empty string');
+    }
+
+    // Check prompt length (prevent DoS via massive prompts)
+    const MAX_PROMPT_LENGTH = 500000; // 500KB
+    if (prompt.length > MAX_PROMPT_LENGTH) {
+      throw new Error(`Prompt exceeds maximum length of ${MAX_PROMPT_LENGTH} characters`);
+    }
+
+    // Check for dangerous patterns that could lead to malicious operations
+    const dangerousPatterns = [
+      { pattern: /rm\s+-rf\s+\//, description: 'dangerous deletion command' },
+      { pattern: /rm\s+-rf\s+~/, description: 'dangerous home directory deletion' },
+      { pattern: /\/etc\/passwd/, description: 'system file access' },
+      { pattern: /\/etc\/shadow/, description: 'password file access' },
+      { pattern: /curl.*\|\s*sh/, description: 'remote code execution pattern' },
+      { pattern: /wget.*\|\s*sh/, description: 'remote code execution pattern' },
+      { pattern: /eval\s*\(/, description: 'code evaluation' },
+      { pattern: /exec\s*\(/, description: 'code execution' },
+      { pattern: /\$\(.*rm.*-rf/, description: 'command injection with deletion' },
+      { pattern: /`.*rm.*-rf/, description: 'command injection with deletion' },
+      { pattern: /base64.*decode.*eval/, description: 'obfuscated code execution' },
+      { pattern: /\.ssh\/id_rsa/, description: 'SSH key access' },
+      { pattern: /\.aws\/credentials/, description: 'AWS credentials access' }
+    ];
+
+    for (const { pattern, description } of dangerousPatterns) {
+      if (pattern.test(prompt)) {
+        logger.error(`Prompt validation failed: contains ${description}`);
+        throw new Error(`Prompt contains potentially dangerous content: ${description}`);
+      }
+    }
+
+    // Log sanitized version for security audit
+    const sanitizedPreview = prompt.substring(0, 200).replace(/\n/g, ' ');
+    logger.debug(`Prompt validated (${prompt.length} chars): ${sanitizedPreview}...`);
+
+    return true;
+  }
+
+  /**
    * Execute PRD generation using Claude /prd skill
    * @param {Object} job - Job object from API
    * @param {Function} onProgress - Callback for progress updates
@@ -47,6 +94,9 @@ class Executor {
     if (job.prompt && job.prompt.trim()) {
       prompt = job.prompt;
       logger.debug('Using server-provided prompt');
+
+      // Validate prompt for security
+      this.validatePrompt(prompt);
     } else {
       logger.warn('No server prompt provided, using client-side prompt (deprecated)');
       prompt = this.buildPrdPrompt(job);
@@ -106,6 +156,9 @@ class Executor {
     if (job.prompt && job.prompt.trim()) {
       prompt = job.prompt;
       logger.debug('Using server-provided prompt');
+
+      // Validate prompt for security
+      this.validatePrompt(prompt);
     } else {
       logger.warn('No server prompt provided, using client-side prompt (deprecated)');
       prompt = this.buildCodePrompt(job);
@@ -133,7 +186,13 @@ class Executor {
   }
 
   /**
-   * Build Claude prompt for PRD generation (fallback)
+   * Build Claude prompt for PRD generation (FALLBACK ONLY)
+   *
+   * DEPRECATED: This method is only used when the server doesn't provide a prompt.
+   * The server should always provide prompts in production. This fallback exists for
+   * backward compatibility and may be removed in a future version once all servers
+   * are confirmed to send prompts.
+   *
    * @param {Object} job - Job object
    * @returns {string} Prompt text
    */
@@ -162,7 +221,13 @@ class Executor {
   }
 
   /**
-   * Build Claude prompt for code implementation (fallback)
+   * Build Claude prompt for code implementation (FALLBACK ONLY)
+   *
+   * DEPRECATED: This method is only used when the server doesn't provide a prompt.
+   * The server should always provide prompts in production. This fallback exists for
+   * backward compatibility and may be removed in a future version once all servers
+   * are confirmed to send prompts.
+   *
    * @param {Object} job - Job object
    * @returns {string} Prompt text
    */
@@ -407,6 +472,31 @@ class Executor {
         }
       }
 
+      // Block access to sensitive subdirectories even within user directories
+      const sensitiveSubdirectories = [
+        '.ssh',                    // SSH keys
+        '.aws',                    // AWS credentials
+        '.config/gcloud',          // Google Cloud credentials
+        '.azure',                  // Azure credentials
+        '.kube',                   // Kubernetes configs
+        '.docker',                 // Docker credentials
+        '.gnupg',                  // GPG keys
+        'Library/Keychains',       // macOS keychains
+        'AppData/Roaming',         // Windows credential storage
+        '.password-store',         // pass password manager
+        '.config/1Password',       // 1Password
+        '.config/Bitwarden'        // Bitwarden
+      ];
+
+      for (const sensitiveDir of sensitiveSubdirectories) {
+        const normalizedDir = sensitiveDir.replace(/\//g, path.sep);
+        if (resolvedPath.includes(path.sep + normalizedDir + path.sep) ||
+            resolvedPath.endsWith(path.sep + normalizedDir)) {
+          logger.error(`Path contains sensitive directory: ${sensitiveDir}`);
+          return null;
+        }
+      }
+
       // Check if path is within allowed base paths (if configured)
       const allowedBasePaths = process.env.RALPH_ALLOWED_PATHS
         ? process.env.RALPH_ALLOWED_PATHS.split(':')
@@ -415,7 +505,7 @@ class Executor {
       if (allowedBasePaths && allowedBasePaths.length > 0) {
         const isAllowed = allowedBasePaths.some(basePath => {
           const resolvedBase = path.resolve(basePath);
-          return resolvedPath === resolvedBase || resolvedPath.startsWith(resolvedBase + '/');
+          return resolvedPath === resolvedBase || resolvedPath.startsWith(resolvedBase + path.sep);
         });
 
         if (!isAllowed) {
