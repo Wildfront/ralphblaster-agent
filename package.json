@@ -7,7 +7,10 @@
     "ralph-agent": "./bin/ralph-agent.js"
   },
   "scripts": {
-    "start": "node bin/ralph-agent.js"
+    "start": "node bin/ralph-agent.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "keywords": [
     "ralph",
@@ -28,6 +31,21 @@
   "dependencies": {
     "axios": "^1.6.0",
     "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coverageDirectory": "coverage",
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/logger.js"
+    ],
+    "testMatch": [
+      "**/test/**/*.test.js"
+    ]
   },
   "engines": {
     "node": ">=18.0.0"
