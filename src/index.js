@@ -3,6 +3,11 @@ const Executor = require('./executor');
 const config = require('./config');
 const logger = require('./logger');
 
+// Timing constants
+const SHUTDOWN_DELAY_MS = 500;
+const ERROR_RETRY_DELAY_MS = 5000;
+const HEARTBEAT_INTERVAL_MS = 60000;
+
 class RalphAgent {
   constructor() {
     this.apiClient = new ApiClient();
@@ -20,7 +25,6 @@ class RalphAgent {
 
     logger.info('Ralph Agent starting...');
     logger.info(`API URL: ${config.apiUrl}`);
-    logger.info(`Poll interval: ${config.pollInterval}ms`);
 
     // Setup graceful shutdown
     this.setupShutdownHandlers();
@@ -60,7 +64,7 @@ class RalphAgent {
 
     logger.info('Ralph Agent stopped');
     // Give async operations time to complete before exiting
-    setTimeout(() => process.exit(0), 500);
+    setTimeout(() => process.exit(0), SHUTDOWN_DELAY_MS);
   }
 
   /**
@@ -83,7 +87,7 @@ class RalphAgent {
         logger.error('Error in poll loop', error.message);
 
         // Wait a bit before retrying on error
-        await this.sleep(5000); // 5 seconds on error
+        await this.sleep(ERROR_RETRY_DELAY_MS);
       }
     }
   }
@@ -108,7 +112,7 @@ class RalphAgent {
         try {
           await this.apiClient.sendProgress(job.id, chunk);
         } catch (error) {
-          logger.warn('Failed to send progress update', error.message);
+          logger.warn(`Failed to send progress update for job #${job.id}`, error.message);
           // Don't fail the job if progress update fails
         }
       });
@@ -148,7 +152,7 @@ class RalphAgent {
       this.apiClient.sendHeartbeat(jobId).catch(err => {
         logger.warn('Heartbeat failed', err.message);
       });
-    }, 60000); // 60 seconds
+    }, HEARTBEAT_INTERVAL_MS);
   }
 
   /**

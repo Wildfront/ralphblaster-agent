@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
 
+// Timing constants
+const PROCESS_KILL_GRACE_PERIOD_MS = 2000;
+
 class Executor {
   constructor() {
     this.currentProcess = null; // Track current spawned process for cleanup
@@ -352,7 +355,7 @@ class Executor {
             logger.warn('Force killing Claude process with SIGKILL');
             this.currentProcess.kill('SIGKILL');
           }
-        }, 2000); // 2 second grace period
+        }, PROCESS_KILL_GRACE_PERIOD_MS);
       } catch (error) {
         logger.error('Error killing Claude process', error.message);
       }

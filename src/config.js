@@ -5,9 +5,6 @@ const config = {
   apiUrl: process.env.RALPH_API_URL || 'https://ralphblaster.com',
   apiToken: process.env.RALPH_API_TOKEN,
 
-  // Polling configuration
-  pollInterval: parseInt(process.env.RALPH_POLL_INTERVAL || '5000', 10), // 5 seconds default
-
   // Execution configuration
   maxRetries: parseInt(process.env.RALPH_MAX_RETRIES || '3', 10),
 

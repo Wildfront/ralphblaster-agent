@@ -7,18 +7,22 @@ const args = process.argv.slice(2);
 const tokenIndex = args.findIndex(arg => arg.startsWith('--token='));
 if (tokenIndex !== -1) {
   const token = args[tokenIndex].split('=')[1];
-  if (token) {
-    process.env.RALPH_API_TOKEN = token;
+  if (!token || token.trim() === '') {
+    console.error('Error: --token flag requires a value');
+    process.exit(1);
   }
+  process.env.RALPH_API_TOKEN = token;
 }
 
 // Check for --api-url flag
 const apiUrlIndex = args.findIndex(arg => arg.startsWith('--api-url='));
 if (apiUrlIndex !== -1) {
   const apiUrl = args[apiUrlIndex].split('=')[1];
-  if (apiUrl) {
-    process.env.RALPH_API_URL = apiUrl;
+  if (!apiUrl || apiUrl.trim() === '') {
+    console.error('Error: --api-url flag requires a value');
+    process.exit(1);
   }
+  process.env.RALPH_API_URL = apiUrl;
 }
 
 // Show help
@@ -31,13 +35,12 @@ Usage:
 
 Options:
   --token=<token>       API token for authentication (required)
-  --api-url=<url>       API base URL (default: http://localhost:5002)
+  --api-url=<url>       API base URL (default: https://ralphblaster.com)
   --help, -h            Show this help message
 
 Environment Variables:
   RALPH_API_TOKEN       API token (required if not using --token)
-  RALPH_API_URL         API base URL (default: http://localhost:5002)
-  RALPH_POLL_INTERVAL   Polling interval in ms (default: 5000)
+  RALPH_API_URL         API base URL (default: https://ralphblaster.com)
   RALPH_LOG_LEVEL       Log level: error, warn, info, debug (default: info)
 
 Examples:
