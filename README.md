@@ -44,14 +44,14 @@ npx ralph-agent --token=your_token_here
 ### Basic Usage
 
 ```bash
-# Using command line flag
+# Production (default)
 ralph-agent --token=your_api_token_here
 
 # Using environment variable
 RALPH_API_TOKEN=your_api_token_here ralph-agent
 
-# With custom API URL
-ralph-agent --token=your_token --api-url=http://localhost:3000
+# Local development (override API URL)
+ralph-agent --token=your_token --api-url=http://localhost:5002
 ```
 
 ### Configuration Options
@@ -61,7 +61,7 @@ The agent can be configured via environment variables or command-line flags:
 | Environment Variable | CLI Flag | Default | Description |
 |---------------------|----------|---------|-------------|
 | `RALPH_API_TOKEN` | `--token=` | *Required* | API authentication token |
-| `RALPH_API_URL` | `--api-url=` | `http://localhost:5002` | Ralph API base URL |
+| `RALPH_API_URL` | `--api-url=` | `https://ralphblaster.com` | Ralph API base URL |
 | `RALPH_POLL_INTERVAL` | - | `5000` | Polling interval in milliseconds |
 | `RALPH_LOG_LEVEL` | - | `info` | Log level (error, warn, info, debug) |
 | `RALPH_MAX_RETRIES` | - | `3` | Maximum retry attempts |
@@ -72,7 +72,7 @@ Create a `.env` file in the ralph-agent directory:
 
 ```env
 RALPH_API_TOKEN=your_api_token_here
-RALPH_API_URL=http://localhost:5002
+# RALPH_API_URL=http://localhost:5002  # Uncomment for local development
 RALPH_POLL_INTERVAL=5000
 RALPH_LOG_LEVEL=info
 ```
@@ -111,7 +111,7 @@ To create an API token with ralph_agent permission:
 ╚═══════════════════════════════════════╝
 
 [2026-01-16T20:00:00.123Z] [INFO] Ralph Agent starting...
-[2026-01-16T20:00:00.124Z] [INFO] API URL: http://localhost:5002
+[2026-01-16T20:00:00.124Z] [INFO] API URL: https://ralphblaster.com
 [2026-01-16T20:00:00.125Z] [INFO] Poll interval: 5000ms
 [2026-01-16T20:00:05.234Z] [INFO] Claimed job #42 - Implement user authentication
 [2026-01-16T20:00:05.345Z] [INFO] Job #42 marked as running

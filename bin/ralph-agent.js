@@ -1,9 +1,6 @@
 #!/usr/bin/env node
 
-const RalphAgent = require('../src/index');
-const logger = require('../src/logger');
-
-// Parse command line arguments
+// Parse command line arguments BEFORE loading modules that use config
 const args = process.argv.slice(2);
 
 // Check for --token flag
@@ -65,6 +62,10 @@ if (args.includes('--version') || args.includes('-v')) {
   console.log(`ralph-agent v${packageJson.version}`);
   process.exit(0);
 }
+
+// Load modules AFTER environment variables are set
+const RalphAgent = require('../src/index');
+const logger = require('../src/logger');
 
 // Start the agent
 const agent = new RalphAgent();

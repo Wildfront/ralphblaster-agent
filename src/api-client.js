@@ -10,18 +10,20 @@ class ApiClient {
         'Authorization': `Bearer ${config.apiToken}`,
         'Content-Type': 'application/json'
       },
-      timeout: 30000 // 30 second timeout
+      timeout: 65000 // 65 second timeout (server max is 60s + buffer)
     });
   }
 
   /**
-   * Poll for next available job
+   * Poll for next available job (with long polling)
    * @returns {Promise<Object|null>} Job object or null if no jobs available
    */
   async getNextJob() {
     try {
-      logger.debug('Polling for next job...');
-      const response = await this.client.get('/api/v1/ralph/jobs/next');
+      logger.debug('Long polling for next job (timeout: 30s)...');
+      const response = await this.client.get('/api/v1/ralph/jobs/next', {
+        params: { timeout: 30 } // Server waits up to 30s for job
+      });
 
       if (response.status === 204) {
         // No jobs available
@@ -79,13 +81,24 @@ class ApiClient {
    */
   async markJobCompleted(jobId, result) {
     try {
-      await this.client.patch(`/api/v1/ralph/jobs/${jobId}`, {
+      const payload = {
         status: 'completed',
         output: result.output,
-        summary: result.summary,
-        branch_name: result.branchName,
         execution_time_ms: result.executionTimeMs
-      });
+      };
+
+      // Add job-type specific fields
+      if (result.prdContent) {
+        payload.prd_content = result.prdContent;
+      }
+      if (result.summary) {
+        payload.summary = result.summary;
+      }
+      if (result.branchName) {
+        payload.branch_name = result.branchName;
+      }
+
+      await this.client.patch(`/api/v1/ralph/jobs/${jobId}`, payload);
       logger.info(`Job #${jobId} marked as completed`);
     } catch (error) {
       logger.error(`Error marking job #${jobId} as completed`, error.message);
@@ -125,6 +138,22 @@ class ApiClient {
       logger.debug(`Heartbeat sent for job #${jobId}`);
     } catch (error) {
       logger.warn(`Error sending heartbeat for job #${jobId}`, error.message);
+    }
+  }
+
+  /**
+   * Send progress update for job (streaming Claude output)
+   * @param {number} jobId - Job ID
+   * @param {string} chunk - Output chunk
+   */
+  async sendProgress(jobId, chunk) {
+    try {
+      await this.client.patch(`/api/v1/ralph/jobs/${jobId}/progress`, {
+        chunk: chunk
+      });
+      logger.debug(`Progress sent for job #${jobId}`);
+    } catch (error) {
+      logger.warn(`Error sending progress for job #${jobId}`, error.message);
     }
   }
 }

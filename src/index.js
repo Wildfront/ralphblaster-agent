@@ -61,20 +61,21 @@ class RalphAgent {
   async pollLoop() {
     while (this.isRunning) {
       try {
-        // Check for next job
+        // Check for next job (long polling - server waits up to 30s)
         const job = await this.apiClient.getNextJob();
 
         if (job) {
           await this.processJob(job);
+          // After processing, immediately poll for next job
         } else {
-          // No jobs available, wait before polling again
-          await this.sleep(config.pollInterval);
+          // No jobs available after long poll timeout
+          // Immediately reconnect (no sleep needed with long polling)
         }
       } catch (error) {
         logger.error('Error in poll loop', error.message);
 
-        // Wait a bit before retrying
-        await this.sleep(config.pollInterval);
+        // Wait a bit before retrying on error
+        await this.sleep(5000); // 5 seconds on error
       }
     }
   }
@@ -93,10 +94,15 @@ class RalphAgent {
       // Start heartbeat to keep job alive
       this.startHeartbeat(job.id);
 
-      // Execute the job
-      const result = await this.executor.execute(job, (chunk) => {
-        // Progress callback - could send to API if needed
-        logger.debug('Claude output chunk received');
+      // Execute the job with progress callback
+      const result = await this.executor.execute(job, async (chunk) => {
+        // Send progress update to server
+        try {
+          await this.apiClient.sendProgress(job.id, chunk);
+        } catch (error) {
+          logger.warn('Failed to send progress update', error.message);
+          // Don't fail the job if progress update fails
+        }
       });
 
       // Stop heartbeat
