@@ -42,6 +42,8 @@ Environment Variables:
   RALPH_API_TOKEN       API token (required if not using --token)
   RALPH_API_URL         API base URL (default: https://ralphblaster.com)
   RALPH_LOG_LEVEL       Log level: error, warn, info, debug (default: info)
+  RALPH_ALLOWED_PATHS   Colon-separated list of allowed base paths for projects
+                        (optional security whitelist, e.g., /Users/me/projects:/home/me/work)
 
 Examples:
   # Run with token from command line

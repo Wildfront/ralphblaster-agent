@@ -2,6 +2,10 @@ const axios = require('axios');
 const config = require('./config');
 const logger = require('./logger');
 
+// Timeout constants
+const LONG_POLLING_TIMEOUT_MS = 65000; // 65s for long polling (server max 60s + buffer)
+const REGULAR_API_TIMEOUT_MS = 15000;  // 15s for regular API calls
+
 class ApiClient {
   constructor() {
     this.client = axios.create({
@@ -10,7 +14,7 @@ class ApiClient {
         'Authorization': `Bearer ${config.apiToken}`,
         'Content-Type': 'application/json'
       },
-      timeout: 65000 // 65 second timeout (server max is 60s + buffer)
+      timeout: REGULAR_API_TIMEOUT_MS
     });
   }
 
@@ -22,7 +26,8 @@ class ApiClient {
     try {
       logger.debug('Long polling for next job (timeout: 30s)...');
       const response = await this.client.get('/api/v1/ralph/jobs/next', {
-        params: { timeout: 30 } // Server waits up to 30s for job
+        params: { timeout: 30 }, // Server waits up to 30s for job
+        timeout: LONG_POLLING_TIMEOUT_MS // Client waits up to 65s
       });
 
       if (response.status === 204) {

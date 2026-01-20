@@ -343,19 +343,28 @@ class Executor {
   /**
    * Kill the current running process if any
    * Used during shutdown to prevent orphaned processes
+   * @returns {Promise<void>} Resolves when process is killed or grace period expires
    */
-  killCurrentProcess() {
+  async killCurrentProcess() {
     if (this.currentProcess && !this.currentProcess.killed) {
       logger.warn('Killing current Claude process due to shutdown');
       try {
         this.currentProcess.kill('SIGTERM');
-        // Give it a moment, then force kill if still alive
-        setTimeout(() => {
-          if (this.currentProcess && !this.currentProcess.killed) {
-            logger.warn('Force killing Claude process with SIGKILL');
-            this.currentProcess.kill('SIGKILL');
-          }
-        }, PROCESS_KILL_GRACE_PERIOD_MS);
+
+        // Wait for grace period, then force kill if still alive
+        await new Promise((resolve) => {
+          setTimeout(() => {
+            if (this.currentProcess && !this.currentProcess.killed) {
+              logger.warn('Force killing Claude process with SIGKILL');
+              try {
+                this.currentProcess.kill('SIGKILL');
+              } catch (killError) {
+                logger.error('Error force killing process', killError.message);
+              }
+            }
+            resolve();
+          }, PROCESS_KILL_GRACE_PERIOD_MS);
+        });
       } catch (error) {
         logger.error('Error killing Claude process', error.message);
       }
@@ -383,13 +392,45 @@ class Executor {
         return null;
       }
 
-      // Additional check: ensure the resolved path doesn't escape to system directories
-      // This is a basic sanity check - adjust based on your security requirements
-      const dangerousPaths = ['/etc', '/bin', '/sbin', '/usr/bin', '/usr/sbin', '/System', '/Windows'];
+      // Comprehensive blacklist of protected system directories
+      const dangerousPaths = [
+        '/etc', '/bin', '/sbin', '/usr/bin', '/usr/sbin',  // Core system dirs
+        '/System', '/Library', '/private',                   // macOS system dirs
+        '/Windows', '/Program Files', '/Program Files (x86)', // Windows system dirs
+        '/root', '/boot', '/dev', '/proc', '/sys'            // Linux/Unix system dirs
+      ];
+
       for (const dangerousPath of dangerousPaths) {
         if (resolvedPath === dangerousPath || resolvedPath.startsWith(dangerousPath + '/')) {
           logger.error(`Path points to protected system directory: ${resolvedPath}`);
           return null;
+        }
+      }
+
+      // Check if path is within allowed base paths (if configured)
+      const allowedBasePaths = process.env.RALPH_ALLOWED_PATHS
+        ? process.env.RALPH_ALLOWED_PATHS.split(':')
+        : null;
+
+      if (allowedBasePaths && allowedBasePaths.length > 0) {
+        const isAllowed = allowedBasePaths.some(basePath => {
+          const resolvedBase = path.resolve(basePath);
+          return resolvedPath === resolvedBase || resolvedPath.startsWith(resolvedBase + '/');
+        });
+
+        if (!isAllowed) {
+          logger.error(`Path is outside allowed base paths: ${resolvedPath}`);
+          return null;
+        }
+      } else {
+        // If no whitelist is configured, warn if path is outside typical user directories
+        const isUserPath = resolvedPath.startsWith('/Users/') ||    // macOS
+                          resolvedPath.startsWith('/home/') ||      // Linux
+                          /^[A-Z]:\\Users\\/i.test(resolvedPath);   // Windows
+
+        if (!isUserPath) {
+          logger.warn(`Path is outside typical user directories: ${resolvedPath}`);
+          // Don't reject, just warn - some valid projects might be elsewhere
         }
       }
 

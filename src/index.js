@@ -15,6 +15,7 @@ class RalphAgent {
     this.isRunning = false;
     this.currentJob = null;
     this.heartbeatInterval = null;
+    this.jobCompleting = false; // Flag to prevent heartbeat race conditions
   }
 
   /**
@@ -46,7 +47,7 @@ class RalphAgent {
     // Kill any running Claude process
     if (this.executor.currentProcess) {
       logger.warn('Terminating running Claude process');
-      this.executor.killCurrentProcess();
+      await this.executor.killCurrentProcess();
     }
 
     // If currently executing a job, mark it as failed
@@ -98,6 +99,7 @@ class RalphAgent {
    */
   async processJob(job) {
     this.currentJob = job;
+    this.jobCompleting = false;
 
     try {
       // Mark job as running
@@ -117,7 +119,8 @@ class RalphAgent {
         }
       });
 
-      // Stop heartbeat before updating job status to prevent race conditions
+      // Set flag to prevent heartbeat race conditions, then stop heartbeat
+      this.jobCompleting = true;
       this.stopHeartbeat();
 
       // Mark job as completed
@@ -125,7 +128,8 @@ class RalphAgent {
 
       logger.info(`Job #${job.id} completed successfully`);
     } catch (error) {
-      // Stop heartbeat before updating job status to prevent race conditions
+      // Set flag to prevent heartbeat race conditions, then stop heartbeat
+      this.jobCompleting = true;
       this.stopHeartbeat();
 
       // Mark job as failed
@@ -137,8 +141,9 @@ class RalphAgent {
 
       logger.error(`Job #${job.id} failed`, error.message);
     } finally {
-      // Clear current job reference
+      // Clear current job reference and reset completion flag
       this.currentJob = null;
+      this.jobCompleting = false;
     }
   }
 
@@ -149,6 +154,12 @@ class RalphAgent {
   startHeartbeat(jobId) {
     // Send heartbeat every 60 seconds to prevent timeout
     this.heartbeatInterval = setInterval(() => {
+      // Check if job is completing to prevent race conditions
+      if (this.jobCompleting) {
+        logger.debug('Skipping heartbeat - job is completing');
+        return;
+      }
+
       this.apiClient.sendHeartbeat(jobId).catch(err => {
         logger.warn('Heartbeat failed', err.message);
       });
