@@ -89,18 +89,16 @@ class Executor {
   async executePrdGeneration(job, onProgress, startTime) {
     logger.info(`Generating PRD for: ${job.task_title}`);
 
-    // Use server-provided prompt if available, otherwise fall back to client-side
-    let prompt;
-    if (job.prompt && job.prompt.trim()) {
-      prompt = job.prompt;
-      logger.debug('Using server-provided prompt');
-
-      // Validate prompt for security
-      this.validatePrompt(prompt);
-    } else {
-      logger.warn('No server prompt provided, using client-side prompt (deprecated)');
-      prompt = this.buildPrdPrompt(job);
+    // Server must provide prompt
+    if (!job.prompt || !job.prompt.trim()) {
+      throw new Error('No prompt provided by server');
     }
+
+    const prompt = job.prompt;
+    logger.debug('Using server-provided prompt');
+
+    // Validate prompt for security
+    this.validatePrompt(prompt);
 
     try {
       // Determine and sanitize working directory
@@ -151,18 +149,16 @@ class Executor {
       throw new Error(`Project path does not exist: ${sanitizedPath}`);
     }
 
-    // Use server-provided prompt if available
-    let prompt;
-    if (job.prompt && job.prompt.trim()) {
-      prompt = job.prompt;
-      logger.debug('Using server-provided prompt');
-
-      // Validate prompt for security
-      this.validatePrompt(prompt);
-    } else {
-      logger.warn('No server prompt provided, using client-side prompt (deprecated)');
-      prompt = this.buildCodePrompt(job);
+    // Server must provide prompt
+    if (!job.prompt || !job.prompt.trim()) {
+      throw new Error('No prompt provided by server');
     }
+
+    const prompt = job.prompt;
+    logger.debug('Using server-provided prompt');
+
+    // Validate prompt for security
+    this.validatePrompt(prompt);
 
     try {
       // Execute claude --print with the prompt
@@ -186,74 +182,65 @@ class Executor {
   }
 
   /**
-   * Build Claude prompt for PRD generation (FALLBACK ONLY)
-   *
-   * DEPRECATED: This method is only used when the server doesn't provide a prompt.
-   * The server should always provide prompts in production. This fallback exists for
-   * backward compatibility and may be removed in a future version once all servers
-   * are confirmed to send prompts.
-   *
-   * @param {Object} job - Job object
-   * @returns {string} Prompt text
+   * Categorize error for user-friendly messaging
+   * @param {Error} error - The error object
+   * @param {string} stderr - Standard error output
+   * @param {number} exitCode - Process exit code
+   * @returns {Object} Object with category, userMessage, and technicalDetails
    */
-  buildPrdPrompt(job) {
-    let prompt = `Generate a detailed Product Requirements Document (PRD) for the following feature request.\n\n`;
-    prompt += `Task: ${job.task_title}\n\n`;
+  categorizeError(error, stderr = '', exitCode = null) {
+    let category = 'unknown';
+    let userMessage = error.message || String(error);
+    let technicalDetails = `Error: ${error.message}\nStderr: ${stderr}\nExit Code: ${exitCode}`;
 
-    if (job.task_description) {
-      prompt += `Description:\n${job.task_description}\n\n`;
+    // Check for Claude CLI not installed
+    if (error.code === 'ENOENT') {
+      category = 'claude_not_installed';
+      userMessage = 'Claude Code CLI is not installed or not found in PATH';
+    }
+    // Check for authentication issues
+    else if (stderr.match(/not authenticated/i) || stderr.match(/authentication failed/i) || stderr.match(/please log in/i)) {
+      category = 'not_authenticated';
+      userMessage = 'Claude CLI is not authenticated. Please run "claude auth"';
+    }
+    // Check for token limit exceeded
+    else if (stderr.match(/token limit exceeded/i) || stderr.match(/quota exceeded/i) || stderr.match(/insufficient credits/i)) {
+      category = 'out_of_tokens';
+      userMessage = 'Claude API token limit has been exceeded';
+    }
+    // Check for rate limiting
+    else if (stderr.match(/rate limit/i) || stderr.match(/too many requests/i) || stderr.match(/429/)) {
+      category = 'rate_limited';
+      userMessage = 'Claude API rate limit reached. Please wait before retrying';
+    }
+    // Check for permission denied
+    else if (stderr.match(/permission denied/i) || stderr.match(/EACCES/i) || error.code === 'EACCES') {
+      category = 'permission_denied';
+      userMessage = 'Permission denied accessing project files or directories';
+    }
+    // Check for timeout
+    else if (error.message && error.message.includes('timed out')) {
+      category = 'execution_timeout';
+      userMessage = 'Job execution exceeded the maximum timeout';
+    }
+    // Check for network errors
+    else if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+      category = 'network_error';
+      userMessage = 'Network error connecting to Claude API';
+    }
+    // Check for non-zero exit code (execution error)
+    else if (exitCode !== null && exitCode !== 0) {
+      category = 'execution_error';
+      userMessage = `Claude CLI execution failed with exit code ${exitCode}`;
     }
 
-    if (job.project?.name) {
-      prompt += `Project: ${job.project.name}\n\n`;
-    }
+    logger.debug(`Error categorized as: ${category}`);
 
-    prompt += `Include these sections:\n`;
-    prompt += `- Overview\n`;
-    prompt += `- User Stories\n`;
-    prompt += `- Functional Requirements\n`;
-    prompt += `- Technical Requirements (if applicable)\n`;
-    prompt += `- Success Metrics\n`;
-    prompt += `- Out of Scope\n\n`;
-    prompt += `Format the PRD in markdown.\n`;
-
-    return prompt;
-  }
-
-  /**
-   * Build Claude prompt for code implementation (FALLBACK ONLY)
-   *
-   * DEPRECATED: This method is only used when the server doesn't provide a prompt.
-   * The server should always provide prompts in production. This fallback exists for
-   * backward compatibility and may be removed in a future version once all servers
-   * are confirmed to send prompts.
-   *
-   * @param {Object} job - Job object
-   * @returns {string} Prompt text
-   */
-  buildCodePrompt(job) {
-    let prompt = `You are Ralph, an autonomous coding agent. Your task is to implement the following PRD:\n\n`;
-    prompt += `# Task: ${job.task_title}\n\n`;
-
-    if (job.task_description) {
-      prompt += `## Description\n${job.task_description}\n\n`;
-    }
-
-    if (job.prd_content) {
-      prompt += `## Product Requirements Document\n${job.prd_content}\n\n`;
-    }
-
-    prompt += `## Instructions\n`;
-    prompt += `- Work in the project directory: ${job.project.system_path}\n`;
-    prompt += `- Create a new git branch for your changes\n`;
-    prompt += `- Implement all requirements from the PRD\n`;
-    prompt += `- Write tests for your changes\n`;
-    prompt += `- Ensure all tests pass\n`;
-    prompt += `- When complete, output a summary starting with "RALPH_SUMMARY:" followed by what you implemented\n`;
-    prompt += `- Output the branch name starting with "RALPH_BRANCH:" followed by the branch name\n\n`;
-    prompt += `Begin implementation now.\n`;
-
-    return prompt;
+    return {
+      category,
+      userMessage,
+      technicalDetails
+    };
   }
 
   /**
@@ -343,7 +330,16 @@ class Executor {
           resolve(stdout);
         } else {
           logger.error(`Claude skill /${skill} exited with code ${code}`);
-          reject(new Error(`Claude skill /${skill} failed with exit code ${code}: ${stderr}`));
+          const baseError = new Error(`Claude skill /${skill} failed with exit code ${code}: ${stderr}`);
+          const errorInfo = this.categorizeError(baseError, stderr, code);
+
+          // Attach categorization to error object
+          const enrichedError = new Error(errorInfo.userMessage);
+          enrichedError.category = errorInfo.category;
+          enrichedError.technicalDetails = errorInfo.technicalDetails;
+          enrichedError.partialOutput = stdout; // Include any partial output
+
+          reject(enrichedError);
         }
       });
 
@@ -351,7 +347,16 @@ class Executor {
         clearTimeout(timer); // Clear timeout
         this.currentProcess = null; // Clear process reference
         logger.error(`Failed to spawn Claude skill /${skill}`, error.message);
-        reject(new Error(`Failed to execute Claude skill /${skill}: ${error.message}`));
+
+        const errorInfo = this.categorizeError(error, stderr, null);
+
+        // Attach categorization to error object
+        const enrichedError = new Error(errorInfo.userMessage);
+        enrichedError.category = errorInfo.category;
+        enrichedError.technicalDetails = errorInfo.technicalDetails;
+        enrichedError.partialOutput = stdout; // Include any partial output
+
+        reject(enrichedError);
       });
     });
   }
@@ -415,7 +420,16 @@ class Executor {
           resolve(stdout);
         } else {
           logger.error(`Claude CLI exited with code ${code}`);
-          reject(new Error(`Claude CLI failed with exit code ${code}: ${stderr}`));
+          const baseError = new Error(`Claude CLI failed with exit code ${code}: ${stderr}`);
+          const errorInfo = this.categorizeError(baseError, stderr, code);
+
+          // Attach categorization to error object
+          const enrichedError = new Error(errorInfo.userMessage);
+          enrichedError.category = errorInfo.category;
+          enrichedError.technicalDetails = errorInfo.technicalDetails;
+          enrichedError.partialOutput = stdout; // Include any partial output
+
+          reject(enrichedError);
         }
       });
 
@@ -423,7 +437,16 @@ class Executor {
         clearTimeout(timer); // Clear timeout
         this.currentProcess = null; // Clear process reference
         logger.error('Failed to spawn Claude CLI', error.message);
-        reject(new Error(`Failed to execute Claude CLI: ${error.message}`));
+
+        const errorInfo = this.categorizeError(error, stderr, null);
+
+        // Attach categorization to error object
+        const enrichedError = new Error(errorInfo.userMessage);
+        enrichedError.category = errorInfo.category;
+        enrichedError.technicalDetails = errorInfo.technicalDetails;
+        enrichedError.partialOutput = stdout; // Include any partial output
+
+        reject(enrichedError);
       });
     });
   }
