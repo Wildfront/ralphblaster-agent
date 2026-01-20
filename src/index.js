@@ -16,6 +16,11 @@ class RalphAgent {
     this.currentJob = null;
     this.heartbeatInterval = null;
     this.jobCompleting = false; // Flag to prevent heartbeat race conditions
+
+    // Rate limiting state
+    this.consecutiveErrors = 0;
+    this.lastRequestTime = 0;
+    this.minRequestInterval = 1000; // Minimum 1s between requests
   }
 
   /**
@@ -69,26 +74,51 @@ class RalphAgent {
   }
 
   /**
-   * Main polling loop
+   * Main polling loop with rate limiting and exponential backoff
    */
   async pollLoop() {
     while (this.isRunning) {
       try {
+        // Enforce minimum interval between requests
+        const now = Date.now();
+        const timeSinceLastRequest = now - this.lastRequestTime;
+        if (timeSinceLastRequest < this.minRequestInterval) {
+          await this.sleep(this.minRequestInterval - timeSinceLastRequest);
+        }
+        this.lastRequestTime = Date.now();
+
         // Check for next job (long polling - server waits up to 30s)
         const job = await this.apiClient.getNextJob();
+
+        // Reset error counter on successful API call
+        this.consecutiveErrors = 0;
 
         if (job) {
           await this.processJob(job);
           // After processing, immediately poll for next job
         } else {
           // No jobs available after long poll timeout
-          // Immediately reconnect (no sleep needed with long polling)
+          // Small delay before reconnecting to prevent hammering
+          await this.sleep(1000); // 1s minimum between polls
         }
       } catch (error) {
-        logger.error('Error in poll loop', error.message);
+        this.consecutiveErrors++;
+        logger.error(`Error in poll loop (consecutive: ${this.consecutiveErrors})`, error.message);
 
-        // Wait a bit before retrying on error
-        await this.sleep(ERROR_RETRY_DELAY_MS);
+        // Exponential backoff: 5s, 10s, 20s, 40s, max 60s
+        const backoffTime = Math.min(
+          ERROR_RETRY_DELAY_MS * Math.pow(2, this.consecutiveErrors - 1),
+          60000
+        );
+
+        logger.info(`Backing off for ${backoffTime}ms before retry`);
+        await this.sleep(backoffTime);
+
+        // Circuit breaker: Stop if too many consecutive errors
+        if (this.consecutiveErrors >= 10) {
+          logger.error('Too many consecutive errors (10+), shutting down');
+          await this.stop();
+        }
       }
     }
   }
