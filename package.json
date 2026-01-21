@@ -1,10 +1,10 @@
 {
-  "name": "ralph-agent",
+  "name": "ralphblaster-agent",
   "version": "1.2.0",
   "description": "Ralph agent that polls for and executes coding jobs via Claude CLI",
   "main": "src/index.js",
   "bin": {
-    "ralphblaster-agent": "./bin/ralph-agent.js"
+    "ralphblaster-agent": "bin/ralph-agent.js"
   },
   "files": [
     "bin/",
