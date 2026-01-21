@@ -6,6 +6,12 @@
   "bin": {
     "ralphblaster-agent": "./bin/ralph-agent.js"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "start": "node bin/ralph-agent.js",
     "test": "jest",

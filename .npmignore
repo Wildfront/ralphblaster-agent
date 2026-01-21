@@ -8,6 +8,7 @@ coverage/
 .env.*
 .git/
 .gitignore
+.claude/
 
 # Documentation (keep README.md)
 TEST_COVERAGE_PLAN.md
