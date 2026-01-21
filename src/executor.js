@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
 const WorktreeManager = require('./worktree-manager');
+const RalphInstanceManager = require('./ralph-instance-manager');
 
 // Timing constants
 const PROCESS_KILL_GRACE_PERIOD_MS = 2000;
@@ -216,7 +217,9 @@ class Executor {
     this.validatePrompt(prompt);
 
     const worktreeManager = new WorktreeManager();
+    const ralphInstanceManager = new RalphInstanceManager();
     let worktreePath = null;
+    let instancePath = null;
 
     try {
       // Create worktree before execution
@@ -227,22 +230,34 @@ class Executor {
         await this.apiClient.updateJobMetadata(job.id, { worktree_path: worktreePath });
       }
 
-      // Run Claude in worktree (not main repo)
-      const output = await this.runClaude(prompt, worktreePath, onProgress);
+      // Create Ralph instance directory with all required files
+      logger.info('Creating Ralph instance...');
+      instancePath = await ralphInstanceManager.createInstance(worktreePath, prompt, job.id);
+      logger.info(`Ralph instance created at: ${instancePath}`);
 
-      // Parse output for summary
-      const result = this.parseOutput(output);
+      // Get main repo path for environment variables
+      const mainRepoPath = sanitizedPath;
 
-      // Get branch name from WorktreeManager
-      const branchName = worktreeManager.getBranchName(job);
+      // Run Ralph in the instance directory
+      const output = await this.runRalphInstance(instancePath, worktreePath, mainRepoPath, onProgress);
+
+      // Check for completion signal
+      const isComplete = ralphInstanceManager.hasCompletionSignal(output);
+
+      // Read progress summary from progress.txt
+      const progressSummary = await ralphInstanceManager.readProgressSummary(instancePath);
+
+      // Get branch name from prd.json
+      const branchName = await ralphInstanceManager.getBranchName(instancePath) || worktreeManager.getBranchName(job);
 
       const executionTimeMs = Date.now() - startTime;
 
       return {
         output: output,
-        summary: result.summary || `Completed task: ${job.task_title}`,
+        summary: progressSummary || `Completed task: ${job.task_title}`,
         branchName: branchName,
-        executionTimeMs: executionTimeMs
+        executionTimeMs: executionTimeMs,
+        ralphComplete: isComplete
       };
     } catch (error) {
       logger.error(`Code implementation failed for job #${job.id}`, error.message);
@@ -525,6 +540,101 @@ class Executor {
         enrichedError.category = errorInfo.category;
         enrichedError.technicalDetails = errorInfo.technicalDetails;
         enrichedError.partialOutput = stdout; // Include any partial output
+
+        reject(enrichedError);
+      });
+    });
+  }
+
+  /**
+   * Run Ralph autonomous agent in instance directory
+   * @param {string} instancePath - Path to Ralph instance directory
+   * @param {string} worktreePath - Path to git worktree
+   * @param {string} mainRepoPath - Path to main repository
+   * @param {Function} onProgress - Progress callback
+   * @param {number} timeout - Timeout in milliseconds (default: 2 hours)
+   * @returns {Promise<string>} Command output
+   */
+  runRalphInstance(instancePath, worktreePath, mainRepoPath, onProgress, timeout = 7200000) {
+    return new Promise((resolve, reject) => {
+      logger.debug(`Starting Ralph execution with timeout: ${timeout}ms`);
+
+      const ralphShPath = path.join(instancePath, 'ralph.sh');
+
+      // Execute ralph.sh with required environment variables
+      const ralph = spawn(ralphShPath, ['10'], { // Max 10 iterations
+        cwd: instancePath,
+        shell: false,
+        env: {
+          ...this.getSanitizedEnv(),
+          RALPH_WORKTREE_PATH: worktreePath,
+          RALPH_INSTANCE_DIR: instancePath,
+          RALPH_MAIN_REPO: mainRepoPath
+        }
+      });
+
+      // Set timeout
+      const timer = setTimeout(() => {
+        logger.error(`Ralph execution timed out after ${timeout}ms`);
+        ralph.kill('SIGTERM');
+        reject(new Error(`Ralph execution timed out after ${timeout}ms`));
+      }, timeout);
+
+      // Track process for shutdown cleanup
+      this.currentProcess = ralph;
+
+      let stdout = '';
+      let stderr = '';
+
+      ralph.stdout.on('data', (data) => {
+        const chunk = data.toString();
+        stdout += chunk;
+        logger.debug('Ralph output:', chunk);
+
+        // Stream output to progress callback
+        if (onProgress) {
+          onProgress(chunk);
+        }
+      });
+
+      ralph.stderr.on('data', (data) => {
+        stderr += data.toString();
+        logger.warn('Ralph stderr:', data.toString());
+      });
+
+      ralph.on('close', (code) => {
+        clearTimeout(timer);
+        this.currentProcess = null;
+
+        // Ralph exits with 0 on completion, 1 on max iterations without completion
+        if (code === 0 || code === 1) {
+          logger.debug(`Ralph execution completed with code ${code}`);
+          resolve(stdout);
+        } else {
+          logger.error(`Ralph exited with code ${code}`);
+          const baseError = new Error(`Ralph failed with exit code ${code}: ${stderr}`);
+          const errorInfo = this.categorizeError(baseError, stderr, code);
+
+          const enrichedError = new Error(errorInfo.userMessage);
+          enrichedError.category = errorInfo.category;
+          enrichedError.technicalDetails = errorInfo.technicalDetails;
+          enrichedError.partialOutput = stdout;
+
+          reject(enrichedError);
+        }
+      });
+
+      ralph.on('error', (error) => {
+        clearTimeout(timer);
+        this.currentProcess = null;
+        logger.error('Failed to spawn Ralph', error.message);
+
+        const errorInfo = this.categorizeError(error, stderr, null);
+
+        const enrichedError = new Error(errorInfo.userMessage);
+        enrichedError.category = errorInfo.category;
+        enrichedError.technicalDetails = errorInfo.technicalDetails;
+        enrichedError.partialOutput = stdout;
 
         reject(enrichedError);
       });
