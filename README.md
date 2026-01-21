@@ -88,9 +88,69 @@ ralph-agent
 1. **Polling**: The agent continuously polls the API endpoint `/api/v1/ralph/jobs/next` for available jobs
 2. **Job Claiming**: When a job is found, it's automatically claimed by the agent
 3. **Status Update**: The agent marks the job as "running" and starts sending heartbeats
-4. **Execution**: The job is executed using `claude --print` in the project directory
+4. **Execution**: The job is executed based on its type:
+   - **PRD Generation**: Uses Claude `/prd` skill or direct prompts
+   - **Code Execution**: Creates a Ralph autonomous agent instance (see below)
 5. **Completion**: Results are parsed and reported back to the API
 6. **Cleanup**: The agent marks the job as completed or failed and continues polling
+
+## Ralph Autonomous Agent Integration
+
+For `code_execution` job types, the agent uses the Ralph autonomous system - an iterative, PRD-driven execution framework that enables complex, multi-step implementations.
+
+### How Ralph Works
+
+1. **Worktree Creation**: Creates an isolated git worktree for the job
+2. **Instance Setup**: Creates a `ralph-instance/` directory with:
+   - `prd.json` - Converted from the job prompt using Claude `/ralph` skill
+   - `ralph.sh` - The autonomous agent loop script
+   - `prompt.md` - Agent instructions
+   - `progress.txt` - Progress tracking log
+3. **Iterative Execution**: Ralph runs up to 10 iterations, each:
+   - Reading the PRD and current progress
+   - Selecting the next highest-priority user story
+   - Implementing the story in the worktree
+   - Running quality checks (tests, typecheck, lint)
+   - Committing changes
+   - Updating the PRD to mark the story as complete
+   - Logging progress
+4. **Completion Detection**: Ralph signals completion with `<promise>COMPLETE</promise>` when all stories pass
+5. **Progress Reporting**: Real-time updates from `progress.txt` are sent back to the API
+
+### Ralph Directory Structure
+
+```
+.ralph-worktrees/job-{id}/
+├── ralph-instance/              # Ralph state directory
+│   ├── ralph.sh                 # Execution loop
+│   ├── prompt.md                # Agent instructions
+│   ├── prd.json                 # Generated PRD with user stories
+│   ├── progress.txt             # Progress log
+│   └── .worktree-path           # Worktree location reference
+└── [project files...]           # Isolated worktree content
+```
+
+### Environment Variables for Ralph
+
+Ralph execution uses these environment variables:
+
+- `RALPH_WORKTREE_PATH` - Path to the git worktree
+- `RALPH_INSTANCE_DIR` - Path to the Ralph instance directory
+- `RALPH_MAIN_REPO` - Path to the main repository
+
+### Ralph Execution Limits
+
+- **Max Iterations**: 10
+- **Timeout**: 2 hours
+- **Completion**: All user stories must pass quality checks
+
+### Advantages of Ralph Integration
+
+- **Structured Approach**: PRD-driven development ensures clear requirements
+- **Quality Assurance**: Each story is validated with tests before proceeding
+- **Progress Tracking**: Detailed logs of what was accomplished
+- **Isolation**: Git worktrees keep work separate from main repository
+- **Iterative Refinement**: Can fix issues and retry failed stories automatically
 
 ## API Token Setup
 
