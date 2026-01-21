@@ -365,7 +365,7 @@ class Executor {
     return new Promise((resolve, reject) => {
       logger.debug(`Running Claude skill: /${skill} with timeout: ${timeout}ms`);
 
-      const claude = spawn('claude', [`/${skill}`], {
+      const claude = spawn('claude', ['--permission-mode', 'acceptEdits', `/${skill}`], {
         cwd: cwd,
         shell: false,  // FIXED: Don't use shell
         env: this.getSanitizedEnv()
@@ -454,7 +454,7 @@ class Executor {
       logger.debug(`Starting Claude CLI execution with timeout: ${timeout}ms`);
 
       // Use stdin to pass prompt - avoids shell injection
-      const claude = spawn('claude', [], {
+      const claude = spawn('claude', ['--permission-mode', 'acceptEdits'], {
         cwd: cwd,
         shell: false,  // FIXED: Don't use shell
         env: this.getSanitizedEnv()
