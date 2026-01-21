@@ -14,7 +14,13 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git rebase:*)",
-      "Bash(npm link)"
+      "Bash(npm link)",
+      "Bash(npm pack:*)",
+      "Bash(ls:*)",
+      "Bash(git worktree:*)",
+      "Bash(lsof:*)",
+      "Bash(git rev-list:*)",
+      "Bash(npm pkg:*)"
     ]
   }
 }
