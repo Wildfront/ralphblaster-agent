@@ -1,5 +1,29 @@
 # Agent Changelog
 
+## 2026-01-21 - Fix PRD to JSON Conversion Permissions (v1.2.1)
+
+### Bug Fix
+
+**Critical Fix**: PRD-to-JSON conversion now includes `--dangerously-skip-permissions` flag
+
+- Fixed: `/ralph` skill execution was failing with "permission restrictions" error
+- Root cause: Claude Code CLI requires explicit permission flag to write files (prd.json)
+- Impact: All code execution jobs were failing at PRD conversion step
+- Solution: Added `--dangerously-skip-permissions` to `claude /ralph` command in `convertPrdToJson()`
+
+### Files Modified
+
+- `src/ralph-instance-manager.js` - Line 64: Added permissions flag to Claude CLI command
+
+### Testing
+
+Users should verify:
+1. Code execution jobs can now convert PRD markdown to prd.json successfully
+2. No more "ENOENT: no such file or directory, access prd.json" errors
+3. Ralph instances start executing code after PRD conversion
+
+---
+
 ## 2026-01-21 - Use Server-Provided Prompts (v1.2.0)
 
 ### Changes Made

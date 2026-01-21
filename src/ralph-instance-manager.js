@@ -61,7 +61,7 @@ Started: ${new Date().toISOString()}
     try {
       // Run claude /ralph to convert the PRD
       const { stdout, stderr } = await execAsync(
-        `claude /ralph < "${promptFilePath}"`,
+        `claude --dangerously-skip-permissions /ralph < "${promptFilePath}"`,
         {
           cwd: instancePath,
           env: {
