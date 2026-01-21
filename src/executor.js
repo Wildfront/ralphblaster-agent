@@ -80,15 +80,33 @@ class Executor {
   }
 
   /**
-   * Execute PRD generation using Claude /prd skill
+   * Execute PRD/Plan generation using Claude
    * @param {Object} job - Job object from API
    * @param {Function} onProgress - Callback for progress updates
    * @param {number} startTime - Start timestamp
    * @returns {Promise<Object>} Execution result
    */
   async executePrdGeneration(job, onProgress, startTime) {
-    logger.info(`Generating PRD for: ${job.task_title}`);
+    // Determine content type from prd_mode field
+    const contentType = job.prd_mode === 'plan' ? 'Plan' : 'PRD';
+    logger.info(`Generating ${contentType} for: ${job.task_title}`);
 
+    // Route to appropriate generation method based on mode
+    if (job.prd_mode === 'plan') {
+      return await this.executePlanGeneration(job, onProgress, startTime);
+    } else {
+      return await this.executeStandardPrd(job, onProgress, startTime);
+    }
+  }
+
+  /**
+   * Execute standard PRD generation using Claude /prd skill
+   * @param {Object} job - Job object from API
+   * @param {Function} onProgress - Callback for progress updates
+   * @param {number} startTime - Start timestamp
+   * @returns {Promise<Object>} Execution result
+   */
+  async executeStandardPrd(job, onProgress, startTime) {
     // Server must provide prompt
     if (!job.prompt || !job.prompt.trim()) {
       throw new Error('No prompt provided by server');
@@ -123,7 +141,61 @@ class Executor {
         executionTimeMs: executionTimeMs
       };
     } catch (error) {
-      logger.error(`PRD generation failed for job #${job.id}`, error.message);
+      logger.error(`PRD generation failed for job #${job.id}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Execute plan generation using Claude Code planning mode
+   * @param {Object} job - Job object from API
+   * @param {Function} onProgress - Callback for progress updates
+   * @param {number} startTime - Start timestamp
+   * @returns {Promise<Object>} Execution result
+   */
+  async executePlanGeneration(job, onProgress, startTime) {
+    // Build prompt that triggers Claude Code's EnterPlanMode
+    let prompt = `IMPORTANT: Use the EnterPlanMode tool to create a detailed implementation plan for this task. After creating the plan using EnterPlanMode, output the complete plan and then exit WITHOUT implementing it.\n\n`;
+    prompt += `Task: ${job.task_title}\n\n`;
+
+    if (job.task_description) {
+      prompt += `Description:\n${job.task_description}\n\n`;
+    }
+
+    if (job.project?.name) {
+      prompt += `Project: ${job.project.name}\n\n`;
+    }
+
+    prompt += `Instructions:\n`;
+    prompt += `1. Use EnterPlanMode to explore the codebase and create an implementation plan\n`;
+    prompt += `2. The plan should include:\n`;
+    prompt += `   - Overview of the approach\n`;
+    prompt += `   - Files that need to be created or modified\n`;
+    prompt += `   - Step-by-step implementation tasks\n`;
+    prompt += `   - Potential challenges and considerations\n`;
+    prompt += `   - Testing strategy\n`;
+    prompt += `3. After creating the plan, output it in markdown format\n`;
+    prompt += `4. DO NOT implement the plan - only create it and output it\n`;
+    prompt += `5. Exit after outputting the plan\n\n`;
+
+    // Add custom instructions if provided
+    if (job.custom_instructions) {
+      prompt += `## Additional Instructions\n${job.custom_instructions}\n\n`;
+    }
+
+    try {
+      // Use Claude Code to trigger planning mode
+      const output = await this.runClaude(prompt, job.project?.system_path || process.cwd(), onProgress);
+
+      const executionTimeMs = Date.now() - startTime;
+
+      return {
+        output: output,
+        prdContent: output.trim(), // The plan content
+        executionTimeMs: executionTimeMs
+      };
+    } catch (error) {
+      logger.error(`Plan generation failed for job #${job.id}:`, error.message);
       throw error;
     }
   }

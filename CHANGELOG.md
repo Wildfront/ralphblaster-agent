@@ -1,5 +1,64 @@
 # Agent Changelog
 
+## 2026-01-20 - Production Optimizations (v1.1.1)
+
+### Changes Made
+
+1. **Reduced Long Polling Timeout**
+   - Changed from 30 seconds to 10 seconds
+   - Reduces max job delivery delay from 30s to 10s
+   - Lower thread occupancy on server
+   - Axios timeout reduced to 15s (10s + 5s buffer)
+
+2. **Better Production Resource Usage**
+   - Faster job delivery with lower resource usage
+   - Improved responsiveness for production deployments
+
+### Files Modified
+
+- `src/api-client.js` - Updated timeout values
+
+---
+
+## 2026-01-20 - PRD Mode Support (v1.1.0)
+
+### Changes Made
+
+1. **PRD Mode Support**
+   - Added support for `prd_mode` field in job payload
+   - Agent now checks `job.prd_mode` to determine content type ("prd" or "plan")
+   - Logs correct content type: "Generating PRD" vs "Generating Plan"
+
+2. **Separate Generation Methods**
+   - Split `executePrdGeneration()` into two methods:
+     - `executeStandardPrd()` - Uses Claude `/prd` skill for PRD generation
+     - `executePlanGeneration()` - Uses Claude Code for implementation planning
+   - Each method uses appropriate prompts for the content type
+
+3. **Custom Instructions Support**
+   - Both PRD and Plan generation now support `custom_instructions` field
+   - Instructions are appended to prompts when provided
+
+### Files Modified
+
+- `src/executor.js` - Added prd_mode routing, separate PRD/Plan methods
+
+### Behavior
+
+When `job.prd_mode === "plan"`:
+- Logs: "Generating Plan for: [task title]"
+- Uses Claude Code with explicit EnterPlanMode instructions
+- Prompts Claude to use its planning mode feature to explore the codebase
+- Returns the generated plan without implementing it
+- Returns plan content as `prdContent`
+
+When `job.prd_mode === "prd"` (or undefined):
+- Logs: "Generating PRD for: [task title]"
+- Uses Claude `/prd` skill to generate PRD
+- Returns PRD content as `prdContent`
+
+---
+
 ## 2026-01-19 - Long Polling + Job Types Update
 
 ### Changes Made
