@@ -251,6 +251,23 @@ class ApiClient {
   }
 
   /**
+   * Update job metadata (best-effort, doesn't fail job if unsuccessful)
+   * @param {number} jobId - Job ID
+   * @param {Object} metadata - Metadata object to merge
+   */
+  async updateJobMetadata(jobId, metadata) {
+    try {
+      await this.client.patch(`/api/v1/ralph/jobs/${jobId}/metadata`, {
+        metadata: metadata
+      });
+      logger.debug(`Metadata updated for job #${jobId}`, metadata);
+    } catch (error) {
+      logger.warn(`Error updating metadata for job #${jobId}`, error.message);
+      // Don't throw - metadata updates are best-effort
+    }
+  }
+
+  /**
    * Validate job object from API
    * @param {Object} job - Job object to validate
    * @returns {string|null} Error message if invalid, null if valid

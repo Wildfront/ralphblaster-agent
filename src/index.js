@@ -11,7 +11,7 @@ const HEARTBEAT_INTERVAL_MS = 60000;
 class RalphAgent {
   constructor() {
     this.apiClient = new ApiClient();
-    this.executor = new Executor();
+    this.executor = new Executor(this.apiClient);
     this.isRunning = false;
     this.currentJob = null;
     this.heartbeatInterval = null;

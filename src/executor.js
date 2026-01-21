@@ -2,13 +2,15 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
+const WorktreeManager = require('./worktree-manager');
 
 // Timing constants
 const PROCESS_KILL_GRACE_PERIOD_MS = 2000;
 
 class Executor {
-  constructor() {
+  constructor(apiClient = null) {
     this.currentProcess = null; // Track current spawned process for cleanup
+    this.apiClient = apiClient; // Optional API client for metadata updates
   }
 
   /**
@@ -213,24 +215,49 @@ class Executor {
     // Validate prompt for security
     this.validatePrompt(prompt);
 
-    try {
-      // Execute claude --print with the prompt
-      const output = await this.runClaude(prompt, sanitizedPath, onProgress);
+    const worktreeManager = new WorktreeManager();
+    let worktreePath = null;
 
-      // Parse output for summary and branch name
+    try {
+      // Create worktree before execution
+      worktreePath = await worktreeManager.createWorktree(job);
+
+      // Update job metadata with worktree path (best-effort)
+      if (this.apiClient) {
+        await this.apiClient.updateJobMetadata(job.id, { worktree_path: worktreePath });
+      }
+
+      // Run Claude in worktree (not main repo)
+      const output = await this.runClaude(prompt, worktreePath, onProgress);
+
+      // Parse output for summary
       const result = this.parseOutput(output);
+
+      // Get branch name from WorktreeManager
+      const branchName = worktreeManager.getBranchName(job);
 
       const executionTimeMs = Date.now() - startTime;
 
       return {
         output: output,
         summary: result.summary || `Completed task: ${job.task_title}`,
-        branchName: result.branchName,
+        branchName: branchName,
         executionTimeMs: executionTimeMs
       };
     } catch (error) {
       logger.error(`Code implementation failed for job #${job.id}`, error.message);
       throw error;
+    } finally {
+      // Cleanup worktree if auto-cleanup enabled (default: true)
+      if (worktreePath && job.project.auto_cleanup_worktrees !== false) {
+        logger.info('Auto-cleanup enabled, removing worktree');
+        await worktreeManager.removeWorktree(job).catch(err =>
+          logger.error(`Cleanup failed: ${err.message}`)
+        );
+      } else if (worktreePath) {
+        logger.info(`Auto-cleanup disabled, keeping worktree: ${worktreePath}`);
+        logger.info(`Branch: ${worktreeManager.getBranchName(job)}`);
+      }
     }
   }
 
