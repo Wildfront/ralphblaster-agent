@@ -176,6 +176,17 @@ class ApiClient {
         }
       }
 
+      // Add git activity metadata
+      if (result.gitActivity) {
+        payload.git_activity = {
+          commit_count: result.gitActivity.commitCount || 0,
+          last_commit: result.gitActivity.lastCommit || null,
+          changes: result.gitActivity.changes || null,
+          pushed_to_remote: result.gitActivity.pushedToRemote || false,
+          has_uncommitted_changes: result.gitActivity.hasUncommittedChanges || false
+        };
+      }
+
       await this.client.patch(`/api/v1/ralph/jobs/${jobId}`, payload);
       logger.info(`Job #${jobId} marked as completed`);
     } catch (error) {

@@ -1,5 +1,6 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 const logger = require('./logger');
 const WorktreeManager = require('./worktree-manager');
@@ -241,6 +242,44 @@ class Executor {
       // Run Ralph in the instance directory
       const output = await this.runRalphInstance(instancePath, worktreePath, mainRepoPath, onProgress);
 
+      // Save execution output to persistent log file (survives cleanup)
+      const logDir = path.join(mainRepoPath, '.ralph-logs');
+      try {
+        await fsPromises.mkdir(logDir, { recursive: true });
+        const logFile = path.join(logDir, `job-${job.id}.log`);
+        const logContent = `
+═══════════════════════════════════════════════════════════
+Job #${job.id} - ${job.task_title}
+Started: ${new Date(startTime).toISOString()}
+═══════════════════════════════════════════════════════════
+
+${output}
+
+═══════════════════════════════════════════════════════════
+Execution completed at: ${new Date().toISOString()}
+═══════════════════════════════════════════════════════════
+`;
+        await fsPromises.writeFile(logFile, logContent);
+        logger.info(`Execution log saved to: ${logFile}`);
+
+        // Also copy progress.txt and prd.json to logs
+        try {
+          const progressFile = path.join(instancePath, 'progress.txt');
+          const prdFile = path.join(instancePath, 'prd.json');
+
+          if (await fsPromises.access(progressFile).then(() => true).catch(() => false)) {
+            await fsPromises.copyFile(progressFile, path.join(logDir, `job-${job.id}-progress.txt`));
+          }
+          if (await fsPromises.access(prdFile).then(() => true).catch(() => false)) {
+            await fsPromises.copyFile(prdFile, path.join(logDir, `job-${job.id}-prd.json`));
+          }
+        } catch (copyError) {
+          logger.warn(`Failed to copy instance files to log: ${copyError.message}`);
+        }
+      } catch (logError) {
+        logger.warn(`Failed to save execution log: ${logError.message}`);
+      }
+
       // Check for completion signal
       const isComplete = ralphInstanceManager.hasCompletionSignal(output);
 
@@ -250,6 +289,33 @@ class Executor {
       // Get branch name from prd.json
       const branchName = await ralphInstanceManager.getBranchName(instancePath) || worktreeManager.getBranchName(job);
 
+      // Build execution summary
+      const executionSummaryLines = [];
+      executionSummaryLines.push('');
+      executionSummaryLines.push('═══════════════════════════════════════════════════════════');
+      executionSummaryLines.push(`Ralph Execution Summary for Job #${job.id}`);
+      executionSummaryLines.push('═══════════════════════════════════════════════════════════');
+      executionSummaryLines.push(`Task: ${job.task_title}`);
+      executionSummaryLines.push(`Branch: ${branchName}`);
+      executionSummaryLines.push(`Completed: ${isComplete ? 'YES ✓' : 'NO (max iterations reached)'}`);
+      executionSummaryLines.push('');
+      executionSummaryLines.push('Progress Summary:');
+      executionSummaryLines.push(progressSummary);
+      executionSummaryLines.push('');
+
+      const executionSummary = executionSummaryLines.join('\n');
+
+      // Log to console
+      logger.info(executionSummary);
+
+      // Send to server via progress callback
+      if (onProgress) {
+        onProgress(executionSummary);
+      }
+
+      // Log git activity details and send to server
+      const gitActivitySummary = await this.logGitActivity(worktreePath, branchName, job.id, onProgress);
+
       const executionTimeMs = Date.now() - startTime;
 
       return {
@@ -257,7 +323,14 @@ class Executor {
         summary: progressSummary || `Completed task: ${job.task_title}`,
         branchName: branchName,
         executionTimeMs: executionTimeMs,
-        ralphComplete: isComplete
+        ralphComplete: isComplete,
+        gitActivity: {
+          commitCount: gitActivitySummary.commitCount,
+          lastCommit: gitActivitySummary.lastCommitInfo,
+          changes: gitActivitySummary.changeStats,
+          pushedToRemote: gitActivitySummary.wasPushed,
+          hasUncommittedChanges: gitActivitySummary.hasUncommittedChanges
+        }
       };
     } catch (error) {
       logger.error(`Code implementation failed for job #${job.id}`, error.message);
@@ -665,6 +738,149 @@ class Executor {
     }
 
     return result;
+  }
+
+  /**
+   * Log git activity details for a job
+   * @param {string} worktreePath - Path to the worktree
+   * @param {string} branchName - Name of the branch
+   * @param {number} jobId - Job ID
+   * @param {Function} onProgress - Optional progress callback to send updates to server
+   * @returns {Promise<Object>} Git activity summary object
+   */
+  async logGitActivity(worktreePath, branchName, jobId, onProgress = null) {
+    if (!worktreePath || !fs.existsSync(worktreePath)) {
+      logger.warn(`Worktree not found for git activity logging: ${worktreePath}`);
+      return;
+    }
+
+    try {
+      const { spawn } = require('child_process');
+
+      // Get commit count on this branch (new commits only, not in origin/main)
+      const commitCount = await new Promise((resolve) => {
+        const gitLog = spawn('git', ['rev-list', '--count', 'HEAD', `^origin/main`], {
+          cwd: worktreePath,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        let stdout = '';
+        gitLog.stdout.on('data', (data) => stdout += data.toString());
+        gitLog.on('close', () => resolve(parseInt(stdout.trim()) || 0));
+        gitLog.on('error', () => resolve(0));
+      });
+
+      // Also check for uncommitted changes
+      const hasUncommittedChanges = await new Promise((resolve) => {
+        const gitStatus = spawn('git', ['status', '--porcelain'], {
+          cwd: worktreePath,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        let stdout = '';
+        gitStatus.stdout.on('data', (data) => stdout += data.toString());
+        gitStatus.on('close', () => resolve(stdout.trim().length > 0));
+        gitStatus.on('error', () => resolve(false));
+      });
+
+      // Get last commit message and hash if commits exist
+      let lastCommitInfo = 'No commits yet';
+      if (commitCount > 0) {
+        lastCommitInfo = await new Promise((resolve) => {
+          const gitLog = spawn('git', ['log', '-1', '--pretty=format:%h - %s'], {
+            cwd: worktreePath,
+            stdio: ['ignore', 'pipe', 'pipe']
+          });
+
+          let stdout = '';
+          gitLog.stdout.on('data', (data) => stdout += data.toString());
+          gitLog.on('close', () => resolve(stdout.trim() || 'No commit info'));
+          gitLog.on('error', () => resolve('Failed to get commit info'));
+        });
+      }
+
+      // Check if branch was pushed to remote
+      const wasPushed = await new Promise((resolve) => {
+        const gitBranch = spawn('git', ['branch', '-r', '--contains', 'HEAD'], {
+          cwd: worktreePath,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        let stdout = '';
+        gitBranch.stdout.on('data', (data) => stdout += data.toString());
+        gitBranch.on('close', () => {
+          const remoteBranches = stdout.trim();
+          resolve(remoteBranches.includes(`origin/${branchName}`));
+        });
+        gitBranch.on('error', () => resolve(false));
+      });
+
+      // Get file change stats
+      const changeStats = await new Promise((resolve) => {
+        const gitDiff = spawn('git', ['diff', '--shortstat', 'origin/main...HEAD'], {
+          cwd: worktreePath,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        let stdout = '';
+        gitDiff.stdout.on('data', (data) => stdout += data.toString());
+        gitDiff.on('close', () => resolve(stdout.trim() || 'No changes'));
+        gitDiff.on('error', () => resolve('Failed to get change stats'));
+      });
+
+      // Build comprehensive git activity summary
+      const summaryLines = [];
+      summaryLines.push('');
+      summaryLines.push('═══════════════════════════════════════════════════════════');
+      summaryLines.push(`Git Activity Summary for Job #${jobId}`);
+      summaryLines.push('═══════════════════════════════════════════════════════════');
+      summaryLines.push(`Branch: ${branchName}`);
+      summaryLines.push(`New commits: ${commitCount}`);
+
+      if (commitCount > 0) {
+        summaryLines.push(`Latest commit: ${lastCommitInfo}`);
+        summaryLines.push(`Changes: ${changeStats}`);
+        summaryLines.push(`Pushed to remote: ${wasPushed ? 'YES ✓' : 'NO (local only)'}`);
+      } else {
+        summaryLines.push('⚠️  NO COMMITS MADE - Ralph did not create any commits');
+        if (hasUncommittedChanges) {
+          summaryLines.push('⚠️  Uncommitted changes detected - work was done but not committed!');
+        } else {
+          summaryLines.push('⚠️  No file changes detected - Ralph may have failed or had nothing to do');
+        }
+      }
+      summaryLines.push('═══════════════════════════════════════════════════════════');
+      summaryLines.push('');
+
+      const summaryText = summaryLines.join('\n');
+
+      // Log to console
+      logger.info(summaryText);
+
+      // Send to server if progress callback provided
+      if (onProgress) {
+        onProgress(summaryText);
+      }
+
+      // Return structured summary object
+      return {
+        branchName,
+        commitCount,
+        lastCommitInfo: commitCount > 0 ? lastCommitInfo : null,
+        changeStats: commitCount > 0 ? changeStats : null,
+        wasPushed,
+        hasUncommittedChanges,
+        summaryText
+      };
+    } catch (error) {
+      logger.warn(`Failed to log git activity: ${error.message}`);
+      return {
+        branchName,
+        commitCount: 0,
+        error: error.message,
+        summaryText: `Failed to gather git activity: ${error.message}`
+      };
+    }
   }
 
   /**
