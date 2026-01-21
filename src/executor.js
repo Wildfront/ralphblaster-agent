@@ -20,7 +20,12 @@ class Executor {
   async execute(job, onProgress) {
     const startTime = Date.now();
 
-    logger.info(`Executing ${job.job_type} job #${job.id}`);
+    // Display human-friendly job description
+    const jobDescription = job.job_type === 'prd_generation'
+      ? `${job.prd_mode === 'plan' ? 'plan' : 'PRD'} generation`
+      : job.job_type;
+
+    logger.info(`Executing ${jobDescription} job #${job.id}`);
 
     // Route to appropriate handler based on job type
     if (job.job_type === 'prd_generation') {
@@ -112,6 +117,7 @@ class Executor {
       throw new Error('No prompt provided by server');
     }
 
+    // Use the server-provided prompt (already formatted with template system)
     const prompt = job.prompt;
     logger.debug('Using server-provided prompt');
 
@@ -154,34 +160,8 @@ class Executor {
    * @returns {Promise<Object>} Execution result
    */
   async executePlanGeneration(job, onProgress, startTime) {
-    // Build prompt that triggers Claude Code's EnterPlanMode
-    let prompt = `IMPORTANT: Use the EnterPlanMode tool to create a detailed implementation plan for this task. After creating the plan using EnterPlanMode, output the complete plan and then exit WITHOUT implementing it.\n\n`;
-    prompt += `Task: ${job.task_title}\n\n`;
-
-    if (job.task_description) {
-      prompt += `Description:\n${job.task_description}\n\n`;
-    }
-
-    if (job.project?.name) {
-      prompt += `Project: ${job.project.name}\n\n`;
-    }
-
-    prompt += `Instructions:\n`;
-    prompt += `1. Use EnterPlanMode to explore the codebase and create an implementation plan\n`;
-    prompt += `2. The plan should include:\n`;
-    prompt += `   - Overview of the approach\n`;
-    prompt += `   - Files that need to be created or modified\n`;
-    prompt += `   - Step-by-step implementation tasks\n`;
-    prompt += `   - Potential challenges and considerations\n`;
-    prompt += `   - Testing strategy\n`;
-    prompt += `3. After creating the plan, output it in markdown format\n`;
-    prompt += `4. DO NOT implement the plan - only create it and output it\n`;
-    prompt += `5. Exit after outputting the plan\n\n`;
-
-    // Add custom instructions if provided
-    if (job.custom_instructions) {
-      prompt += `## Additional Instructions\n${job.custom_instructions}\n\n`;
-    }
+    // Use the server-provided prompt (already formatted with template system)
+    const prompt = job.prompt;
 
     try {
       // Use Claude Code to trigger planning mode
@@ -226,6 +206,7 @@ class Executor {
       throw new Error('No prompt provided by server');
     }
 
+    // Use the server-provided prompt (already formatted with template system)
     const prompt = job.prompt;
     logger.debug('Using server-provided prompt');
 

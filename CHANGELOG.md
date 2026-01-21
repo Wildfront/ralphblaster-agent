@@ -1,5 +1,52 @@
 # Agent Changelog
 
+## 2026-01-21 - Use Server-Provided Prompts (v1.2.0)
+
+### Changes Made
+
+1. **Removed Duplicate Prompt Logic**
+   - Agent now uses `job.prompt` field from server instead of building prompts
+   - Eliminates duplicate prompt logic between server and agent
+   - Server's template system is now authoritative for all prompts
+   - Ensures both title and description are always included (via server templates)
+
+2. **Simplified Executor Methods**
+   - `executeStandardPrd()` - Now simply uses `job.prompt`
+   - `executePlanGeneration()` - Now simply uses `job.prompt`
+   - `executeCodeImplementation()` - Now simply uses `job.prompt`
+   - Removed `buildCodePrompt()` method (no longer needed)
+
+3. **Benefits**
+   - Single source of truth for prompts (server-side templates)
+   - Easier to modify prompts without agent code changes
+   - Consistent formatting across all job types
+   - Supports custom prompt templates via server admin panel
+
+### Files Modified
+
+- `src/executor.js` - Removed prompt building logic, use job.prompt
+
+### Migration Notes
+
+**Breaking Change:** This version requires server version with template system support (RalphBlaster v2.0+)
+
+---
+
+## 2026-01-21 - Fix Job Type Logging (v1.1.2)
+
+### Changes Made
+
+1. **Fixed Job Type Display in Logs**
+   - Updated executor.js to check `prd_mode` field when logging job execution
+   - Now correctly displays "Executing plan generation job #X" instead of "Executing prd_generation job #X"
+   - Improves log clarity when generating plans vs PRDs
+
+### Files Modified
+
+- `src/executor.js` - Added prd_mode check for job description logging (line 17-19)
+
+---
+
 ## 2026-01-20 - Production Optimizations (v1.1.1)
 
 ### Changes Made
