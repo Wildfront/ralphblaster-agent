@@ -112,7 +112,7 @@ class Executor {
   }
 
   /**
-   * Execute standard PRD generation using Claude /prd skill
+   * Execute standard PRD generation using Claude Code
    * @param {Object} job - Job object from API
    * @param {Function} onProgress - Callback for progress updates
    * @param {number} startTime - Start timestamp
@@ -143,8 +143,8 @@ class Executor {
         }
       }
 
-      // Use Claude /prd skill
-      const output = await this.runClaudeSkill('prd', prompt, workingDir, onProgress);
+      // Use Claude Code with server-provided template (no longer using /prd skill)
+      const output = await this.runClaude(prompt, workingDir, onProgress);
 
       const executionTimeMs = Date.now() - startTime;
 
