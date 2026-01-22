@@ -70,7 +70,7 @@ describe('WorktreeManager - Complete Coverage', () => {
 
       const result = await createPromise;
 
-      expect(result).toContain('.ralph-worktrees/job-123');
+      expect(result).toContain('path-worktrees/job-123');
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('Creating worktree'),
         expect.any(Object)
@@ -224,7 +224,7 @@ describe('WorktreeManager - Complete Coverage', () => {
           'add',
           '-b',
           'ralph/ticket-3/job-3',
-          expect.stringContaining('.ralph-worktrees/job-3'),
+          '/test-worktrees/job-3',
           'HEAD'
         ],
         expect.any(Object)
@@ -316,7 +316,7 @@ describe('WorktreeManager - Complete Coverage', () => {
 
       const result = await createPromise;
 
-      expect(result).toBe('/test/project/.ralph-worktrees/job-5');
+      expect(result).toBe('/test/project-worktrees/job-5');
     });
 
     test('handles error and logs correctly', async () => {
@@ -519,7 +519,7 @@ describe('WorktreeManager - Complete Coverage', () => {
 
       const path = manager.getWorktreePath(job);
 
-      expect(path).toBe('/test/path/.ralph-worktrees/job-13');
+      expect(path).toBe('/test/path-worktrees/job-13');
     });
 
     test('generates path with different job IDs', () => {
@@ -536,8 +536,8 @@ describe('WorktreeManager - Complete Coverage', () => {
       const path1 = manager.getWorktreePath(job1);
       const path2 = manager.getWorktreePath(job2);
 
-      expect(path1).toBe('/test/.ralph-worktrees/job-100');
-      expect(path2).toBe('/test/.ralph-worktrees/job-200');
+      expect(path1).toBe('/test-worktrees/job-100');
+      expect(path2).toBe('/test-worktrees/job-200');
       expect(path1).not.toBe(path2);
     });
 
@@ -549,7 +549,7 @@ describe('WorktreeManager - Complete Coverage', () => {
 
       const path = manager.getWorktreePath(job);
 
-      expect(path).toBe('/different/path/.ralph-worktrees/job-1');
+      expect(path).toBe('/different/path-worktrees/job-1');
     });
   });
 

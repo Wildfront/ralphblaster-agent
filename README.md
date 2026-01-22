@@ -119,15 +119,19 @@ For `code_execution` job types, the agent uses the Ralph autonomous system - an 
 
 ### Ralph Directory Structure
 
+Worktrees are created as siblings to your project (not inside it) to prevent git conflicts:
+
 ```
-.ralph-worktrees/job-{id}/
-├── ralph-instance/              # Ralph state directory
-│   ├── ralph.sh                 # Execution loop
-│   ├── prompt.md                # Agent instructions
-│   ├── prd.json                 # Generated PRD with user stories
-│   ├── progress.txt             # Progress log
-│   └── .worktree-path           # Worktree location reference
-└── [project files...]           # Isolated worktree content
+my-project/                      # Your main repository
+my-project-worktrees/            # Worktrees (sibling directory)
+└── job-{id}/                    # Isolated worktree for each job
+    ├── ralph-instance/          # Ralph state directory
+    │   ├── ralph.sh             # Execution loop
+    │   ├── prompt.md            # Agent instructions
+    │   ├── prd.json             # Generated PRD with user stories
+    │   ├── progress.txt         # Progress log
+    │   └── .worktree-path       # Worktree location reference
+    └── [project files...]       # Isolated copy of project code
 ```
 
 ### Environment Variables for Ralph

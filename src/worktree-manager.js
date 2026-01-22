@@ -6,8 +6,11 @@ const logger = require('./logger');
 /**
  * WorktreeManager - Manages git worktrees for parallel job execution
  *
- * Each job gets an isolated worktree in .ralph-worktrees/job-{id}/
+ * Each job gets an isolated worktree as a sibling to the repo:
+ * <repo-parent>/<repo-name>-worktrees/job-{id}/
  * with a unique branch: ralph/ticket-{task_id}/job-{job_id}
+ *
+ * Worktrees are created OUTSIDE the repo to prevent git conflicts.
  */
 class WorktreeManager {
   /**
@@ -96,12 +99,17 @@ class WorktreeManager {
 
   /**
    * Get the absolute path where the worktree should be created
+   * Creates worktree as a sibling to the repo, not inside it
    * @param {Object} job - The job object
    * @returns {string} - Absolute path to worktree
    */
   getWorktreePath(job) {
     const systemPath = job.project.system_path
-    return path.join(systemPath, '.ralph-worktrees', `job-${job.id}`)
+    const repoName = path.basename(systemPath)
+    const repoParent = path.dirname(systemPath)
+    // Create worktree as sibling: /parent/repo-worktrees/job-{id}
+    // NOT inside repo: /parent/repo/.ralph-worktrees/job-{id}
+    return path.join(repoParent, `${repoName}-worktrees`, `job-${job.id}`)
   }
 
   /**

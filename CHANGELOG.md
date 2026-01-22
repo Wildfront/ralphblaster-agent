@@ -1,5 +1,45 @@
 # Agent Changelog
 
+## 2026-01-22 - Fix Worktree Location to Prevent Main Branch Conflicts (v1.4.0)
+
+### Critical Bug Fix
+
+**Issue**: Worktrees were being created inside the main repository (`.ralph-worktrees/`), causing git to switch the main directory to the worktree's branch.
+
+**Impact**:
+- Users working in the main directory would find their branch unexpectedly switched
+- Git could behave unpredictably with nested worktrees
+- Main repo and worktree could interfere with each other
+
+**Solution**:
+- Worktrees are now created as siblings to the repo: `<repo-parent>/<repo-name>-worktrees/job-{id}/`
+- This prevents any git conflicts between main repo and worktrees
+- Follows git best practices for worktree management
+
+### Files Modified
+
+- `src/worktree-manager.js` - Changed `getWorktreePath()` to create worktrees outside repo
+- `test/worktree-manager-complete.test.js` - Updated all test expectations for new path format
+- `README.md` - Updated directory structure documentation
+
+### Migration Notes
+
+**For existing installations:**
+- Old worktrees in `.ralph-worktrees/` will remain but won't be used
+- New jobs will create worktrees in the new location
+- You can safely delete old `.ralph-worktrees/` directories after verifying no active work exists
+- Add `.ralph-worktrees/` to your `.gitignore` to hide legacy directories
+
+### Testing
+
+Verified:
+- All 33 WorktreeManager tests pass
+- Worktrees created in correct sibling location
+- No interference with main repository branch
+- Ralph execution works with new worktree location
+
+---
+
 ## 2026-01-21 - Fix PRD to JSON Conversion Permissions (v1.2.1)
 
 ### Bug Fix
