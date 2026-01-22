@@ -52,8 +52,28 @@ describe('ApiClient', () => {
       expect(result).toBeNull();
       expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/ralph/jobs/next', {
         params: { timeout: 30 },
-        timeout: 65000
+        timeout: 35000  // Updated to 30s + 5s buffer = 35s
       });
+    });
+
+    test('uses proper timeout values - server timeout plus buffer', async () => {
+      mockAxiosInstance.get.mockResolvedValue({ status: 204 });
+
+      await apiClient.getNextJob();
+
+      const getNextJobCall = mockAxiosInstance.get.mock.calls[0];
+      const serverTimeout = getNextJobCall[1].params.timeout;
+      const clientTimeout = getNextJobCall[1].timeout;
+
+      // Verify client timeout is server timeout + reasonable buffer
+      expect(clientTimeout).toBe(serverTimeout * 1000 + 5000);
+
+      // Verify buffer is reasonable (should be 5 seconds)
+      const bufferMs = clientTimeout - (serverTimeout * 1000);
+      expect(bufferMs).toBe(5000);
+
+      // Verify client timeout doesn't waste too much time
+      expect(clientTimeout).toBeLessThan(40000); // Should be well under 40s
     });
 
     test('returns job on success', async () => {

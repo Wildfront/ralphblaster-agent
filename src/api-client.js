@@ -7,7 +7,9 @@ const packageJson = require('../package.json');
 const AGENT_VERSION = packageJson.version;
 
 // Timeout constants
-const LONG_POLLING_TIMEOUT_MS = 65000; // 65s for long polling (server max 60s + buffer)
+const SERVER_LONG_POLL_TIMEOUT_S = 30; // Server waits up to 30s for job
+const NETWORK_BUFFER_MS = 5000;        // 5s buffer for network latency
+const LONG_POLLING_TIMEOUT_MS = (SERVER_LONG_POLL_TIMEOUT_S * 1000) + NETWORK_BUFFER_MS; // 35s
 const REGULAR_API_TIMEOUT_MS = 15000;  // 15s for regular API calls
 
 class ApiClient {
@@ -50,10 +52,10 @@ class ApiClient {
    */
   async getNextJob() {
     try {
-      logger.debug('Long polling for next job (timeout: 30s)...');
+      logger.debug(`Long polling for next job (timeout: ${SERVER_LONG_POLL_TIMEOUT_S}s)...`);
       const response = await this.client.get('/api/v1/ralph/jobs/next', {
-        params: { timeout: 30 }, // Server waits up to 30s for job
-        timeout: LONG_POLLING_TIMEOUT_MS // Client waits up to 65s
+        params: { timeout: SERVER_LONG_POLL_TIMEOUT_S }, // Server waits up to 30s for job
+        timeout: LONG_POLLING_TIMEOUT_MS // Client waits up to 35s (30s + 5s buffer)
       });
 
       if (response.status === 204) {
