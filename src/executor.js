@@ -679,7 +679,9 @@ Execution completed at: ${new Date().toISOString()}
               'file_modified',
               `Modified: ${path.basename(filename)}`,
               { filename: filename }
-            );
+            ).catch(error => {
+              logger.debug(`Event emission error: ${error.message}`);
+            });
             break; // Only emit one event per chunk
           }
         }
@@ -691,7 +693,9 @@ Execution completed at: ${new Date().toISOString()}
           this.currentJobId,
           'git_commit',
           'Changes committed'
-        );
+        ).catch(error => {
+          logger.debug(`Event emission error: ${error.message}`);
+        });
       }
 
       // Detect test execution
@@ -700,7 +704,9 @@ Execution completed at: ${new Date().toISOString()}
           this.currentJobId,
           'tests_running',
           'Running tests...'
-        );
+        ).catch(error => {
+          logger.debug(`Event emission error: ${error.message}`);
+        });
       }
 
       // Detect cleanup phase
@@ -709,7 +715,9 @@ Execution completed at: ${new Date().toISOString()}
           this.currentJobId,
           'cleanup_started',
           'Cleaning up...'
-        );
+        ).catch(error => {
+          logger.debug(`Event emission error: ${error.message}`);
+        });
       }
     } catch (error) {
       // Silently ignore event emission errors to avoid disrupting execution
