@@ -39,29 +39,35 @@ Commands:
   init                  Initialize current directory as a RalphBlaster project
 
 Options:
-  --token=<token>       API token for authentication (required)
+  --token=<token>       API token for authentication
   --api-url=<url>       API base URL (default: https://ralphblaster.com)
   --help, -h            Show this help message
 
+Configuration:
+  Token is loaded from (in order of priority):
+  1. --token flag
+  2. RALPH_API_TOKEN environment variable
+  3. ~/.ralphblasterrc config file
+
 Environment Variables:
-  RALPH_API_TOKEN       API token (required if not using --token)
+  RALPH_API_TOKEN       API token
   RALPH_API_URL         API base URL (default: https://ralphblaster.com)
   RALPH_LOG_LEVEL       Log level: error, warn, info, debug (default: info)
   RALPH_ALLOWED_PATHS   Colon-separated list of allowed base paths for projects
                         (optional security whitelist, e.g., /Users/me/projects:/home/me/work)
 
 Examples:
-  # Run agent in polling mode
-  ralph-agent --token=your_token_here
-
-  # Initialize current directory as a project
+  # Initialize and save token (first time setup)
   ralph-agent init --token=your_token_here
+
+  # Run agent (uses token from ~/.ralphblasterrc)
+  ralph-agent
 
   # Run with environment variable
   RALPH_API_TOKEN=your_token_here ralph-agent
 
   # Run with custom API URL
-  ralph-agent --token=your_token --api-url=http://localhost:3000
+  ralph-agent --api-url=http://localhost:3000
 
   # Use npx
   npx ralph-agent --token=your_token_here

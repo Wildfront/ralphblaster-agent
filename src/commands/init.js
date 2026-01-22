@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const ApiClient = require('../api-client');
+const ConfigFileManager = require('../config-file-manager');
 const logger = require('../logger');
 
 /**
@@ -12,6 +13,7 @@ class InitCommand {
   constructor() {
     this.cwd = process.cwd();
     this.apiClient = new ApiClient();
+    this.configFileManager = new ConfigFileManager();
   }
 
   /**
@@ -21,6 +23,13 @@ class InitCommand {
     try {
       logger.info('Initializing RalphBlaster project...');
 
+      // Save token to ~/.ralphblasterrc if provided
+      const token = process.env.RALPH_API_TOKEN;
+      if (token) {
+        this.configFileManager.update({ apiToken: token });
+        logger.debug('Token saved to ~/.ralphblasterrc');
+      }
+
       // Detect project name
       const projectName = await this.detectProjectName();
       logger.debug(`Detected project name: ${projectName}`);
@@ -29,7 +38,7 @@ class InitCommand {
       const project = await this.createProject(this.cwd, projectName);
 
       // Display success message
-      this.displaySuccess(project);
+      this.displaySuccess(project, !!token);
 
       process.exit(0);
     } catch (error) {
@@ -160,7 +169,7 @@ class InitCommand {
   /**
    * Display success message
    */
-  displaySuccess(project) {
+  displaySuccess(project, tokenSaved = false) {
     const iconEmoji = this.getIconEmoji(project.icon);
 
     console.log('\n✓ Project initialized successfully!\n');
@@ -168,6 +177,12 @@ class InitCommand {
     console.log(`  Path:  ${project.system_path}`);
     console.log(`  Icon:  ${iconEmoji}`);
     console.log(`  Color: ${this.formatColorName(project.color)}\n`);
+
+    if (tokenSaved) {
+      console.log('✓ API token saved to ~/.ralphblasterrc\n');
+      console.log('You can now run "ralphblaster" without passing the token.\n');
+    }
+
     console.log('You can now create tasks for this project in RalphBlaster.\n');
   }
 
