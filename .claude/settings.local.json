@@ -45,7 +45,9 @@
       "Bash(npm cache clean:*)",
       "Bash(npm uninstall:*)",
       "Bash(ralphblaster --help:*)",
-      "Bash(timeout 3 ralphblaster:*)"
+      "Bash(timeout 3 ralphblaster:*)",
+      "Bash(npm publish)",
+      "Bash(ralphblaster)"
     ]
   }
 }
