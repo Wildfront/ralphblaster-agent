@@ -1,9 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
-const { exec } = require('child_process');
-const { promisify } = require('util');
-
-const execAsync = promisify(exec);
+const { spawn } = require('child_process');
 
 /**
  * Manages Ralph agent instances within git worktrees
@@ -59,19 +56,43 @@ Started: ${new Date().toISOString()}
     await fs.writeFile(promptFilePath, prompt);
 
     try {
-      // Run claude /ralph to convert the PRD
-      const { stdout, stderr } = await execAsync(
-        `claude --dangerously-skip-permissions /ralph < "${promptFilePath}"`,
-        {
-          cwd: instancePath,
-          env: {
-            ...process.env,
-            // Ensure Claude CLI can access the instance directory
-            PWD: instancePath
-          },
-          maxBuffer: 10 * 1024 * 1024 // 10MB buffer for large outputs
-        }
-      );
+      // Run claude /ralph to convert the PRD using spawn (no shell execution)
+      const claude = spawn('claude', ['--dangerously-skip-permissions', '/ralph'], {
+        cwd: instancePath,
+        env: {
+          ...process.env,
+          PWD: instancePath
+        },
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      // Pipe the file content to stdin
+      const fileStream = require('fs').createReadStream(promptFilePath);
+      fileStream.pipe(claude.stdin);
+
+      let stdout = '';
+      let stderr = '';
+
+      claude.stdout.on('data', (data) => stdout += data.toString());
+      claude.stderr.on('data', (data) => stderr += data.toString());
+
+      // Wait for process to complete with timeout
+      const exitCode = await new Promise((resolve, reject) => {
+        claude.on('close', resolve);
+        claude.on('error', reject);
+
+        // 5 minute timeout for PRD conversion
+        const timeout = setTimeout(() => {
+          claude.kill('SIGTERM');
+          reject(new Error('PRD conversion timed out after 5 minutes'));
+        }, 300000);
+
+        claude.on('close', () => clearTimeout(timeout));
+      });
+
+      if (exitCode !== 0) {
+        throw new Error(`Claude /ralph failed with exit code ${exitCode}: ${stderr}`);
+      }
 
       // Verify prd.json was created
       const prdJsonPath = path.join(instancePath, 'prd.json');
