@@ -25,7 +25,8 @@ describe('RalphAgent Progress Callback Error Handling', () => {
       markJobCompleted: jest.fn(),
       markJobFailed: jest.fn(),
       sendProgress: jest.fn(),
-      sendHeartbeat: jest.fn()
+      sendHeartbeat: jest.fn(),
+      sendStatusEvent: jest.fn().mockResolvedValue()
     };
 
     mockExecutor = {

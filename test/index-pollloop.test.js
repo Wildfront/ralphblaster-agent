@@ -27,7 +27,8 @@ describe('RalphAgent Poll Loop', () => {
       markJobCompleted: jest.fn(),
       markJobFailed: jest.fn(),
       sendProgress: jest.fn(),
-      sendHeartbeat: jest.fn()
+      sendHeartbeat: jest.fn(),
+      sendStatusEvent: jest.fn().mockResolvedValue()
     };
 
     mockExecutor = {
