@@ -20,7 +20,7 @@ ${colors.gray}           /\\
         |      |
         |  ${colors.bright}${colors.yellow}${colors.reset}${colors.gray}${colors.bright}${colors.yellow}.${colors.reset}${colors.gray}  |
         | ${colors.yellow}(${colors.bright}${colors.yellow}o${colors.reset}${colors.yellow})${colors.reset}${colors.gray} |        ${colors.bright}${colors.yellow}Ralph Agent${colors.reset}
-        | ${colors.yellow}(${colors.bright}${colors.yellow}o${colors.reset}${colors.yellow})${colors.reset}${colors.gray} |        ${colors.dim}v1.3.3${colors.reset}
+        | ${colors.yellow}(${colors.bright}${colors.yellow}o${colors.reset}${colors.yellow})${colors.reset}${colors.gray} |        ${colors.dim}v1.3.4${colors.reset}
         |  ${colors.yellow}~${colors.reset}${colors.gray}  |
         | ${colors.red}\\___/${colors.reset}${colors.gray} |
         |      |
