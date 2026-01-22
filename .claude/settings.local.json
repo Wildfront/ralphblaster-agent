@@ -38,7 +38,9 @@
       "Bash(perl -i -pe:*)",
       "Skill(commit)",
       "Bash(git checkout:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(ralphblaster --version:*)",
+      "Bash(node postinstall-colored.js:*)"
     ]
   }
 }
