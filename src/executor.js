@@ -452,7 +452,7 @@ Execution completed at: ${new Date().toISOString()}
   getSanitizedEnv() {
     const safeEnv = {};
 
-    // Only copy necessary environment variables
+    // Explicitly allowed environment variables
     const allowedVars = [
       'PATH',
       'HOME',
@@ -461,16 +461,36 @@ Execution completed at: ${new Date().toISOString()}
       'LC_ALL',
       'TERM',
       'TMPDIR',
-      'SHELL'
+      'SHELL',
+      'NODE_ENV'  // Add NODE_ENV for Claude
+    ];
+
+    // Explicitly blocked patterns (even if they match allowed vars)
+    const blockedPatterns = [
+      /^RALPH_API_TOKEN$/i,
+      /^.*_TOKEN$/i,
+      /^.*_SECRET$/i,
+      /^.*_KEY$/i,
+      /^.*_PASSWORD$/i,
+      /^AWS_/i,
+      /^AZURE_/i,
+      /^GCP_/i,
+      /^GOOGLE_/i
     ];
 
     for (const key of allowedVars) {
       if (process.env[key]) {
-        safeEnv[key] = process.env[key];
+        // Double-check not in blocklist
+        const isBlocked = blockedPatterns.some(pattern => pattern.test(key));
+        if (!isBlocked) {
+          safeEnv[key] = process.env[key];
+        }
       }
     }
 
-    logger.debug(`Sanitized environment: ${Object.keys(safeEnv).join(', ')}`);
+    // Don't log HOME to avoid exposing username in logs
+    const safeToLog = Object.keys(safeEnv).filter(k => k !== 'HOME');
+    logger.debug(`Sanitized environment: ${safeToLog.join(', ')}`);
     return safeEnv;
   }
 
