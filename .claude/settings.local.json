@@ -40,7 +40,12 @@
       "Bash(git checkout:*)",
       "Bash(wc:*)",
       "Bash(ralphblaster --version:*)",
-      "Bash(node postinstall-colored.js:*)"
+      "Bash(node postinstall-colored.js:*)",
+      "Bash(npm whoami:*)",
+      "Bash(npm cache clean:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(ralphblaster --help:*)",
+      "Bash(timeout 3 ralphblaster:*)"
     ]
   }
 }
