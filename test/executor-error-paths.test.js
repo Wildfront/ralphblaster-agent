@@ -293,7 +293,7 @@ describe('Executor Error Paths', () => {
       // Should spawn with process.cwd() not the invalid path
       expect(spawn).toHaveBeenCalledWith(
         'claude',
-        ['--permission-mode', 'acceptEdits', '/prd'],
+        ['--permission-mode', 'acceptEdits'],
         expect.objectContaining({
           cwd: process.cwd() // Falls back to current directory
         })

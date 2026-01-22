@@ -4,6 +4,14 @@ const { spawn } = require('child_process');
 // Mock child_process
 jest.mock('child_process');
 
+// Mock config
+jest.mock('../src/config', () => ({
+  apiUrl: 'https://test-api.com',
+  apiToken: 'test-token',
+  maxRetries: 3,
+  logLevel: 'info'
+}));
+
 // Mock logger
 jest.mock('../src/logger', () => ({
   info: jest.fn(),
