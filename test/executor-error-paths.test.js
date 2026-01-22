@@ -109,7 +109,7 @@ describe('Executor Error Paths', () => {
       mockProcess.emit('close', 1);
 
       await expect(skillPromise).rejects.toThrow(
-        'Claude skill /prd failed with exit code 1'
+        'Claude CLI execution failed with exit code 1'
       );
     });
 
@@ -135,7 +135,7 @@ describe('Executor Error Paths', () => {
       mockProcess.stderr.emit('data', Buffer.from('Skill not found'));
       mockProcess.emit('close', 127);
 
-      await expect(skillPromise).rejects.toThrow('Skill not found');
+      await expect(skillPromise).rejects.toThrow('Claude CLI execution failed with exit code 127');
     });
 
     test('runClaude rejects on non-zero exit code', async () => {
@@ -156,7 +156,7 @@ describe('Executor Error Paths', () => {
       mockProcess.emit('close', 1);
 
       await expect(claudePromise).rejects.toThrow(
-        'Claude CLI failed with exit code 1'
+        'Claude CLI is not authenticated. Please run "claude auth"'
       );
     });
 
@@ -201,11 +201,13 @@ describe('Executor Error Paths', () => {
         null
       );
 
-      // Emit error event
-      mockProcess.emit('error', new Error('ENOENT: claude command not found'));
+      // Emit error event with ENOENT code
+      const error = new Error('ENOENT: claude command not found');
+      error.code = 'ENOENT';
+      mockProcess.emit('error', error);
 
       await expect(skillPromise).rejects.toThrow(
-        'Failed to execute Claude skill /prd: ENOENT: claude command not found'
+        'Claude Code CLI is not installed or not found in PATH'
       );
     });
 
@@ -223,11 +225,13 @@ describe('Executor Error Paths', () => {
 
       const claudePromise = executor.runClaude('Test', '/test', null);
 
-      // Emit error event
-      mockProcess.emit('error', new Error('EACCES: permission denied'));
+      // Emit error event with EACCES code
+      const error = new Error('EACCES: permission denied');
+      error.code = 'EACCES';
+      mockProcess.emit('error', error);
 
       await expect(claudePromise).rejects.toThrow(
-        'Failed to execute Claude CLI: EACCES: permission denied'
+        'Permission denied accessing project files or directories'
       );
     });
 
@@ -289,7 +293,7 @@ describe('Executor Error Paths', () => {
       // Should spawn with process.cwd() not the invalid path
       expect(spawn).toHaveBeenCalledWith(
         'claude',
-        ['/prd'],
+        ['--permission-mode', 'acceptEdits', '/prd'],
         expect.objectContaining({
           cwd: process.cwd() // Falls back to current directory
         })

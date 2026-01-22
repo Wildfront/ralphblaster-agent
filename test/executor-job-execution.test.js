@@ -162,7 +162,7 @@ describe('Executor - Job Execution', () => {
 
       expect(spawn).toHaveBeenCalledWith(
         'claude',
-        ['/prd'],
+        ['--permission-mode', 'acceptEdits', '/prd'],
         expect.objectContaining({
           cwd: process.cwd()
         })
