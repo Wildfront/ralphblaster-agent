@@ -37,7 +37,8 @@
       "Bash(else echo \"File doesn''t exist\")",
       "Bash(perl -i -pe:*)",
       "Skill(commit)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(wc:*)"
     ]
   }
 }
