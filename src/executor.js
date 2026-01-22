@@ -24,6 +24,9 @@ class Executor {
   async execute(job, onProgress) {
     const startTime = Date.now();
 
+    // Store job ID for event emission
+    this.currentJobId = job.id;
+
     // Display human-friendly job description
     const jobDescription = job.job_type === 'prd_generation'
       ? `${job.prd_mode === 'plan' ? 'plan' : 'PRD'} generation`
@@ -223,21 +226,41 @@ class Executor {
     let instancePath = null;
 
     try {
+      // Send event: Setup started
+      if (this.apiClient) {
+        await this.apiClient.sendStatusEvent(job.id, 'setup_started', 'Setting up workspace...');
+        await this.apiClient.sendStatusEvent(job.id, 'progress_update', 'Initializing...', { percentage: 5 });
+      }
+
       // Create worktree before execution
+      if (this.apiClient) {
+        await this.apiClient.sendStatusEvent(job.id, 'git_operations', 'Creating Git worktree...');
+      }
       worktreePath = await worktreeManager.createWorktree(job);
 
       // Update job metadata with worktree path (best-effort)
       if (this.apiClient) {
         await this.apiClient.updateJobMetadata(job.id, { worktree_path: worktreePath });
+        await this.apiClient.sendStatusEvent(job.id, 'git_operations', `Worktree ready at ${path.basename(worktreePath)}`);
+        await this.apiClient.sendStatusEvent(job.id, 'progress_update', 'Workspace ready', { percentage: 10 });
       }
 
       // Create Ralph instance directory with all required files
       logger.info('Creating Ralph instance...');
+      if (this.apiClient) {
+        await this.apiClient.sendStatusEvent(job.id, 'prompt_prepared', 'Preparing task for Claude...');
+      }
       instancePath = await ralphInstanceManager.createInstance(worktreePath, prompt, job.id);
       logger.info(`Ralph instance created at: ${instancePath}`);
 
       // Get main repo path for environment variables
       const mainRepoPath = sanitizedPath;
+
+      // Send event: Claude starting
+      if (this.apiClient) {
+        await this.apiClient.sendStatusEvent(job.id, 'claude_started', 'Claude is analyzing and executing the task...');
+        await this.apiClient.sendStatusEvent(job.id, 'progress_update', 'Claude started', { percentage: 15 });
+      }
 
       // Run Ralph in the instance directory
       const output = await this.runRalphInstance(instancePath, worktreePath, mainRepoPath, onProgress);
@@ -317,6 +340,17 @@ Execution completed at: ${new Date().toISOString()}
       const gitActivitySummary = await this.logGitActivity(worktreePath, branchName, job.id, onProgress);
 
       const executionTimeMs = Date.now() - startTime;
+
+      // Send completion events
+      if (this.apiClient) {
+        await this.apiClient.sendStatusEvent(job.id, 'progress_update', 'Finalizing...', { percentage: 95 });
+        await this.apiClient.sendStatusEvent(
+          job.id,
+          'job_completed',
+          isComplete ? 'Task completed successfully' : 'Task reached max iterations'
+        );
+        await this.apiClient.sendStatusEvent(job.id, 'progress_update', 'Complete', { percentage: 100 });
+      }
 
       return {
         output: output,
@@ -620,6 +654,70 @@ Execution completed at: ${new Date().toISOString()}
   }
 
   /**
+   * Detect and emit structured events from Claude output
+   * Analyzes output chunks for common patterns and sends status events to UI
+   * @param {string} chunk - Output chunk from Claude
+   */
+  detectAndEmitEvents(chunk) {
+    if (!this.apiClient || !this.currentJobId) return;
+
+    try {
+      // Detect file modifications
+      const filePatterns = [
+        /(?:Writing to|Created file|Modified file|Editing)\s+([^\s\n]+)/i,
+        /(?:Successfully (?:created|modified|updated))\s+([^\s\n]+)/i,
+        /File\s+([^\s\n]+)\s+(?:created|modified|updated)/i
+      ];
+
+      for (const pattern of filePatterns) {
+        const match = chunk.match(pattern);
+        if (match && match[1]) {
+          const filename = match[1].replace(/[`'"]/g, '').trim();
+          if (filename && !filename.includes('...')) {
+            this.apiClient.sendStatusEvent(
+              this.currentJobId,
+              'file_modified',
+              `Modified: ${path.basename(filename)}`,
+              { filename: filename }
+            );
+            break; // Only emit one event per chunk
+          }
+        }
+      }
+
+      // Detect git commits
+      if (/git commit|committed changes|Created commit/i.test(chunk)) {
+        this.apiClient.sendStatusEvent(
+          this.currentJobId,
+          'git_commit',
+          'Changes committed'
+        );
+      }
+
+      // Detect test execution
+      if (/Running tests|running test|bin\/rails test|npm test|pytest/i.test(chunk)) {
+        this.apiClient.sendStatusEvent(
+          this.currentJobId,
+          'tests_running',
+          'Running tests...'
+        );
+      }
+
+      // Detect cleanup phase
+      if (/cleanup|cleaning up|removing temporary/i.test(chunk)) {
+        this.apiClient.sendStatusEvent(
+          this.currentJobId,
+          'cleanup_started',
+          'Cleaning up...'
+        );
+      }
+    } catch (error) {
+      // Silently ignore event emission errors to avoid disrupting execution
+      logger.debug(`Event detection error: ${error.message}`);
+    }
+  }
+
+  /**
    * Run Ralph autonomous agent in instance directory
    * @param {string} instancePath - Path to Ralph instance directory
    * @param {string} worktreePath - Path to git worktree
@@ -663,6 +761,9 @@ Execution completed at: ${new Date().toISOString()}
         const chunk = data.toString();
         stdout += chunk;
         logger.debug('Ralph output:', chunk);
+
+        // Detect and emit structured events from Claude output
+        this.detectAndEmitEvents(chunk);
 
         // Stream output to progress callback
         if (onProgress) {

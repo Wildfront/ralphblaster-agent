@@ -16,6 +16,7 @@ class RalphAgent {
     this.currentJob = null;
     this.heartbeatInterval = null;
     this.jobCompleting = false; // Flag to prevent heartbeat race conditions
+    this.jobStartTime = null; // Track when job started for elapsed time
 
     // Rate limiting state
     this.consecutiveErrors = 0;
@@ -130,10 +131,14 @@ class RalphAgent {
   async processJob(job) {
     this.currentJob = job;
     this.jobCompleting = false;
+    this.jobStartTime = Date.now(); // Track start time for elapsed time calculation
 
     try {
       // Mark job as running
       await this.apiClient.markJobRunning(job.id);
+
+      // Send initial status event
+      await this.apiClient.sendStatusEvent(job.id, 'job_claimed', `Starting: ${job.task_title}`);
 
       // Start heartbeat to keep job alive
       this.startHeartbeat(job.id);
@@ -174,6 +179,7 @@ class RalphAgent {
       // Clear current job reference and reset completion flag
       this.currentJob = null;
       this.jobCompleting = false;
+      this.jobStartTime = null;
     }
   }
 
@@ -183,16 +189,32 @@ class RalphAgent {
    */
   startHeartbeat(jobId) {
     // Send heartbeat every 60 seconds to prevent timeout
-    this.heartbeatInterval = setInterval(() => {
+    this.heartbeatInterval = setInterval(async () => {
       // Check if job is completing to prevent race conditions
       if (this.jobCompleting) {
         logger.debug('Skipping heartbeat - job is completing');
         return;
       }
 
-      this.apiClient.sendHeartbeat(jobId).catch(err => {
+      try {
+        // Calculate elapsed time
+        const elapsed = Date.now() - this.jobStartTime;
+        const minutes = Math.floor(elapsed / 60000);
+        const seconds = Math.floor((elapsed % 60000) / 1000);
+
+        // Send heartbeat to update claimed_at
+        await this.apiClient.sendHeartbeat(jobId);
+
+        // Send status event with elapsed time
+        await this.apiClient.sendStatusEvent(
+          jobId,
+          'heartbeat',
+          `Still working... (${minutes}m ${seconds}s elapsed)`,
+          { elapsed_ms: elapsed }
+        );
+      } catch (err) {
         logger.warn('Heartbeat failed', err.message);
-      });
+      }
     }, HEARTBEAT_INTERVAL_MS);
   }
 

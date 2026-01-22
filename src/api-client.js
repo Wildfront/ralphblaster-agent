@@ -262,6 +262,27 @@ class ApiClient {
   }
 
   /**
+   * Send status event for job (structured progress updates for UI visibility)
+   * @param {number} jobId - Job ID
+   * @param {string} eventType - Event type (e.g., 'setup_started', 'file_modified', 'progress_update')
+   * @param {string} message - Human-readable status message
+   * @param {Object} metadata - Optional metadata (e.g., {filename: 'app.js', percentage: 50})
+   */
+  async sendStatusEvent(jobId, eventType, message, metadata = {}) {
+    try {
+      await this.client.post(`/api/v1/ralph/jobs/${jobId}/events`, {
+        event_type: eventType,
+        message: message,
+        metadata: metadata
+      });
+      logger.debug(`Status event sent for job #${jobId}: ${eventType} - ${message}`);
+    } catch (error) {
+      logger.warn(`Error sending status event for job #${jobId}`, error.message);
+      // Don't throw - status events are best-effort for UI visibility
+    }
+  }
+
+  /**
    * Update job metadata (best-effort, doesn't fail job if unsuccessful)
    * @param {number} jobId - Job ID
    * @param {Object} metadata - Metadata object to merge
