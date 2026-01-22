@@ -379,10 +379,16 @@ describe('Executor - Code Implementation Gaps', () => {
 
       const execPromise = executor.executeCodeImplementation(job, jest.fn(), Date.now());
 
+      // Attach error handler immediately to prevent unhandled rejection warning
+      const errorPromise = execPromise.catch(err => err);
+
       await emitErrorAfterSpawn(mockProcess, 'Error', 2);
       await emitGitProcessEvents(mockGitProcesses);
 
-      await expect(execPromise).rejects.toThrow();
+      // Wait for the promise to settle
+      const error = await errorPromise;
+      expect(error).toBeDefined();
+      expect(error.message).toContain('exit code 2');
 
       // Cleanup should still happen
       expect(mockWorktreeManager.removeWorktree).toHaveBeenCalled();

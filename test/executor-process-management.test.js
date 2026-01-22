@@ -101,7 +101,7 @@ describe('Executor - Process Management', () => {
   });
 
   describe('currentProcess tracking', () => {
-    test('currentProcess is set when spawning Claude', () => {
+    test('currentProcess is set when spawning Claude', (done) => {
       const mockProcess = {
         stdin: { write: jest.fn(), end: jest.fn() },
         stdout: { on: jest.fn() },
@@ -111,7 +111,18 @@ describe('Executor - Process Management', () => {
 
       spawn.mockReturnValue(mockProcess);
 
-      executor.runClaude('test prompt', '/test/path', jest.fn());
+      // Simulate process completing to clean up timer
+      mockProcess.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          setTimeout(() => callback(0), 0);
+        }
+      });
+      mockProcess.stdout.on.mockImplementation(() => {});
+      mockProcess.stderr.on.mockImplementation(() => {});
+
+      executor.runClaude('test prompt', '/test/path', jest.fn()).then(() => {
+        done();
+      });
 
       expect(executor.currentProcess).toBe(mockProcess);
     });
@@ -171,7 +182,7 @@ describe('Executor - Process Management', () => {
       });
     });
 
-    test('currentProcess is set when running Claude skill', () => {
+    test('currentProcess is set when running Claude skill', (done) => {
       const mockProcess = {
         stdin: { write: jest.fn(), end: jest.fn() },
         stdout: { on: jest.fn() },
@@ -181,7 +192,18 @@ describe('Executor - Process Management', () => {
 
       spawn.mockReturnValue(mockProcess);
 
-      executor.runClaudeSkill('prd', 'test prompt', '/test/path', jest.fn());
+      // Simulate process completing to clean up timer
+      mockProcess.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          setTimeout(() => callback(0), 0);
+        }
+      });
+      mockProcess.stdout.on.mockImplementation(() => {});
+      mockProcess.stderr.on.mockImplementation(() => {});
+
+      executor.runClaudeSkill('prd', 'test prompt', '/test/path', jest.fn()).then(() => {
+        done();
+      });
 
       expect(executor.currentProcess).toBe(mockProcess);
     });
