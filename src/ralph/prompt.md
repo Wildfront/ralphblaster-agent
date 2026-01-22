@@ -33,6 +33,26 @@ DO NOT wait for permission or approval - you are authorized to make all necessar
 
 ## Your Task
 
+### Step 0: Learn Project Patterns (CRITICAL - Do This First!)
+
+Before implementing any stories, read all existing AGENTS.md files to learn project-specific patterns:
+
+```bash
+cd $RALPH_WORKTREE_PATH
+find . -name "AGENTS.md" -type f -exec echo "=== {} ===" \; -exec cat {} \;
+```
+
+These files contain critical knowledge from previous iterations and developers. Read them carefully to understand:
+- Coding patterns and conventions specific to this project
+- Gotchas and non-obvious requirements
+- Dependencies between files/modules
+- Testing approaches
+- Configuration requirements
+
+**Do NOT skip this step** - it will save you from repeating past mistakes and help you follow established patterns.
+
+### Implementation Steps
+
 1. Read the PRD at `$RALPH_INSTANCE_DIR/prd.json`
 2. Read the progress log at `$RALPH_INSTANCE_DIR/progress.txt` (check Codebase Patterns section first)
 3. Navigate to worktree: `cd $RALPH_WORKTREE_PATH` (SKIP branch checkout - you're already on the correct branch!)
@@ -91,44 +111,87 @@ Include the thread URL so future iterations can use the `read_thread` tool to re
 
 The learnings section is critical - it helps future iterations avoid repeating mistakes and understand the codebase better.
 
-## Consolidate Patterns
+## Consolidate Patterns in Progress.txt
 
-If you discover a **reusable pattern** that future iterations should know, add it to the `## Codebase Patterns` section at the TOP of progress.txt (create it if it doesn't exist). This section should consolidate the most important learnings:
+If you discover **project-wide patterns** that apply across the entire codebase, add them to the `## Codebase Patterns` section at the TOP of progress.txt (create it if it doesn't exist):
 
 ```
 ## Codebase Patterns
-- Example: Use `sql<number>` template for aggregations
-- Example: Always use `IF NOT EXISTS` for migrations
-- Example: Export types from actions.ts for UI components
+- Use `sql<number>` template literal for all database queries
+- Always use `IF NOT EXISTS` for migrations
+- Export types from actions.ts for UI components to consume
+- All async operations use the `AsyncHandler` wrapper pattern
 ```
 
-Only add patterns that are **general and reusable**, not story-specific details.
+### Progress.txt vs AGENTS.md - When to Use Each
 
-## Update AGENTS.md Files
+**Use progress.txt Codebase Patterns for:**
+- **Project-wide** conventions that apply everywhere
+- High-level architectural patterns
+- Global code standards
 
-Before committing, check if any edited files have learnings worth preserving in nearby AGENTS.md files:
+**Use AGENTS.md files for:**
+- **Module/directory-specific** patterns
+- Localized gotchas and requirements
+- Component or feature-area conventions
 
-1. **Identify directories with edited files** - Look at which directories you modified
-2. **Check for existing AGENTS.md** - Look for AGENTS.md in those directories or parent directories
-3. **Add valuable learnings** - If you discovered something future developers/agents should know:
-   - API patterns or conventions specific to that module
-   - Gotchas or non-obvious requirements
-   - Dependencies between files
-   - Testing approaches for that area
-   - Configuration or environment requirements
+**Rule of thumb:** If the pattern only matters in one directory tree, put it in AGENTS.md there. If it applies across the whole project, put it in progress.txt.
 
-**Examples of good AGENTS.md additions:**
-- "When modifying X, also update Y to keep them in sync"
-- "This module uses pattern Z for all API calls"
-- "Tests require the dev server running on PORT 3000"
-- "Field names must match the template exactly"
+## Update AGENTS.md Files (Critical for Future Iterations)
 
-**Do NOT add:**
-- Story-specific implementation details
-- Temporary debugging notes
-- Information already in progress.txt
+Before committing, **you MUST check** if you discovered patterns worth documenting in AGENTS.md files:
 
-Only update AGENTS.md if you have **genuinely reusable knowledge** that would help future work in that directory.
+### When to Update AGENTS.md
+
+Update AGENTS.md if you discovered:
+- **Module-specific patterns** - "All controllers in this dir use `before_action :set_account`"
+- **Critical gotchas** - "When modifying X, also update Y to keep them in sync"
+- **Testing requirements** - "Tests require running `bin/setup` first" or "Mock API_KEY in tests"
+- **Configuration dependencies** - "This module requires ENV['REDIS_URL'] configured"
+- **File interdependencies** - "Schema changes here require updating serializer in /app/serializers"
+- **Non-obvious conventions** - "Use `sql<number>` template literal for all DB queries"
+
+### How to Update AGENTS.md
+
+```bash
+# Check which directories you modified
+git status
+
+# For each directory with changes, check if AGENTS.md exists
+ls app/models/AGENTS.md      # Example
+
+# If it exists, append your learnings
+# If it doesn't exist and you have valuable patterns, create it:
+cat >> app/models/AGENTS.md << 'EOF'
+# Model Patterns
+
+- All models must include `acts_as_tenant :account` for multi-tenancy
+- Use `belongs_to :account, optional: false` to enforce account scoping
+- Add validation: `validates :name, presence: true, uniqueness: { scope: :account_id }`
+
+EOF
+```
+
+### Examples of Good AGENTS.md Entries
+
+✅ **Good - Reusable patterns:**
+- "Authentication requires calling `current_user.update_last_login!` after sign-in"
+- "All API endpoints must inherit from `Api::BaseController` for auth"
+- "Background jobs use Sidekiq with `queue: :critical` for payment processing"
+
+❌ **Bad - Too specific or temporary:**
+- "Fixed bug in UserController line 42" (too specific to this story)
+- "TODO: refactor this later" (temporary note)
+- "This code works" (not useful)
+
+### Location Strategy
+
+Create AGENTS.md at the most specific level that makes sense:
+- `app/models/account/AGENTS.md` - Patterns for Account-related models
+- `app/controllers/api/AGENTS.md` - Patterns for API controllers
+- `app/AGENTS.md` - Project-wide patterns
+
+**This is not optional** - future iterations depend on these learnings to work efficiently!
 
 ## Quality Requirements
 
