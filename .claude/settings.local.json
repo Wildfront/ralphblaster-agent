@@ -20,7 +20,22 @@
       "Bash(git worktree:*)",
       "Bash(lsof:*)",
       "Bash(git rev-list:*)",
-      "Bash(npm pkg:*)"
+      "Bash(npm pkg:*)",
+      "Bash(tee:*)",
+      "Bash(jq:*)",
+      "Bash(grep:*)",
+      "Bash(for f in test/executor-environment.test.js test/executor-error-categorization.test.js test/executor-git-activity.test.js test/executor-job-execution.test.js test/executor-kill-process.test.js test/executor-plan-generation.test.js test/executor-process-management.test.js test/executor-ralph-instance.test.js test/executor-timeout-handling.test.js)",
+      "Bash(do)",
+      "Bash(if [ -f \"$f\" ])",
+      "Bash(then)",
+      "Bash(echo:*)",
+      "Bash(if ! grep -q \"jest.mock.*config\" \"$f\")",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(if [ -f \"test/worktree-manager-complete.test.js\" ])",
+      "Bash(then grep -c \"jest.mock.*config\" test/worktree-manager-complete.test.js)",
+      "Bash(else echo \"File doesn''t exist\")",
+      "Bash(perl -i -pe:*)"
     ]
   }
 }
