@@ -24,3 +24,6 @@ coverage/
 # Build output
 dist/
 build/
+
+# Local Claude settings
+.claude/settings.local.json
