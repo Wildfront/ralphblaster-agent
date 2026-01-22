@@ -9,6 +9,7 @@
   "files": [
     "bin/",
     "src/",
+    "postinstall-colored.js",
     "LICENSE",
     "README.md"
   ],
@@ -16,7 +17,8 @@
     "start": "node bin/ralph-agent.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "postinstall": "node postinstall-colored.js"
   },
   "keywords": [
     "ralph",
