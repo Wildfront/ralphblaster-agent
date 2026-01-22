@@ -115,20 +115,24 @@ describe('RalphAgent - Graceful Shutdown', () => {
 
       mockApiClient.markJobRunning.mockResolvedValue();
       mockApiClient.markJobCompleted.mockResolvedValue();
+      mockApiClient.sendStatusEvent = jest.fn().mockResolvedValue();
       mockExecutor.execute.mockResolvedValue({
         output: 'output',
         executionTimeMs: 1000
       });
 
-      const stopHeartbeatSpy = jest.spyOn(agent, 'stopHeartbeat');
+      const callOrder = [];
+      const stopHeartbeatSpy = jest.spyOn(agent, 'stopHeartbeat').mockImplementation(() => {
+        callOrder.push('stopHeartbeat');
+      });
+      mockApiClient.markJobCompleted.mockImplementation(async () => {
+        callOrder.push('markJobCompleted');
+      });
 
       await agent.processJob(job);
 
       expect(stopHeartbeatSpy).toHaveBeenCalled();
-      // Verify it was called before markJobCompleted
-      const stopHeartbeatOrder = stopHeartbeatSpy.mock.invocationCallOrder[0];
-      const markCompletedOrder = mockApiClient.markJobCompleted.mock.invocationCallOrder[0];
-      expect(stopHeartbeatOrder).toBeLessThan(markCompletedOrder);
+      expect(callOrder).toEqual(['stopHeartbeat', 'markJobCompleted']);
     });
 
     test('stopHeartbeat is called before marking job failed', async () => {
@@ -140,17 +144,21 @@ describe('RalphAgent - Graceful Shutdown', () => {
 
       mockApiClient.markJobRunning.mockResolvedValue();
       mockApiClient.markJobFailed.mockResolvedValue();
+      mockApiClient.sendStatusEvent = jest.fn().mockResolvedValue();
       mockExecutor.execute.mockRejectedValue(new Error('Execution failed'));
 
-      const stopHeartbeatSpy = jest.spyOn(agent, 'stopHeartbeat');
+      const callOrder = [];
+      const stopHeartbeatSpy = jest.spyOn(agent, 'stopHeartbeat').mockImplementation(() => {
+        callOrder.push('stopHeartbeat');
+      });
+      mockApiClient.markJobFailed.mockImplementation(async () => {
+        callOrder.push('markJobFailed');
+      });
 
       await agent.processJob(job);
 
       expect(stopHeartbeatSpy).toHaveBeenCalled();
-      // Verify it was called before markJobFailed
-      const stopHeartbeatOrder = stopHeartbeatSpy.mock.invocationCallOrder[0];
-      const markFailedOrder = mockApiClient.markJobFailed.mock.invocationCallOrder[0];
-      expect(stopHeartbeatOrder).toBeLessThan(markFailedOrder);
+      expect(callOrder).toEqual(['stopHeartbeat', 'markJobFailed']);
     });
   });
 });
