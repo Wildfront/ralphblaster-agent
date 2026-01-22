@@ -36,7 +36,8 @@
       "Bash(then grep -c \"jest.mock.*config\" test/worktree-manager-complete.test.js)",
       "Bash(else echo \"File doesn''t exist\")",
       "Bash(perl -i -pe:*)",
-      "Skill(commit)"
+      "Skill(commit)",
+      "Bash(git checkout:*)"
     ]
   }
 }
