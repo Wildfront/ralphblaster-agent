@@ -76,7 +76,7 @@ describe('Config', () => {
 
       const config = require('../src/config');
 
-      expect(config.apiUrl).toBe('https://ralphblaster.com');
+      expect(config.apiUrl).toBe('https://app.ralphblaster.com');
     });
 
     test('uses default max retries when not set', () => {
