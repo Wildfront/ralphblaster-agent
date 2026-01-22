@@ -32,6 +32,11 @@ Ralph Agent - Autonomous coding agent for Ralph
 
 Usage:
   ralph-agent [options]
+  ralph-agent init [options]
+
+Commands:
+  (default)             Start the agent in polling mode
+  init                  Initialize current directory as a RalphBlaster project
 
 Options:
   --token=<token>       API token for authentication (required)
@@ -46,8 +51,11 @@ Environment Variables:
                         (optional security whitelist, e.g., /Users/me/projects:/home/me/work)
 
 Examples:
-  # Run with token from command line
+  # Run agent in polling mode
   ralph-agent --token=your_token_here
+
+  # Initialize current directory as a project
+  ralph-agent init --token=your_token_here
 
   # Run with environment variable
   RALPH_API_TOKEN=your_token_here ralph-agent
@@ -66,6 +74,17 @@ if (args.includes('--version') || args.includes('-v')) {
   const packageJson = require('../package.json');
   console.log(`ralph-agent v${packageJson.version}`);
   process.exit(0);
+}
+
+// Check for init command
+if (args.includes('init')) {
+  const InitCommand = require('../src/commands/init');
+  const initCmd = new InitCommand();
+  initCmd.run().catch(error => {
+    // Error handling is done in InitCommand.handleError
+    // Just exit with error code
+  });
+  return; // Don't start agent polling loop
 }
 
 // Load modules AFTER environment variables are set
