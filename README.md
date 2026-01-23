@@ -6,6 +6,7 @@ Ralph Agent is a distributed autonomous coding agent that polls a Rails API for 
 
 - 🔄 **Automatic Job Polling**: Continuously polls the Ralph API for new coding jobs
 - 🤖 **Claude CLI Integration**: Executes jobs using the Claude CLI
+- 🚀 **Multi-Agent Support**: Run multiple agents concurrently for parallel job processing
 - 💪 **Resilient**: Handles failures gracefully with automatic retries and timeouts
 - 🔐 **Secure**: Uses API tokens with specific permissions for authentication
 - 📊 **Real-time Updates**: Reports job progress and status back to the API
@@ -44,7 +45,7 @@ npx ralph-agent --token=your_token_here
 ### Basic Usage
 
 ```bash
-# Production (default)
+# Single agent (default)
 ralph-agent --token=your_api_token_here
 
 # Using environment variable
@@ -54,6 +55,34 @@ RALPH_API_TOKEN=your_api_token_here ralph-agent
 ralph-agent --token=your_token --api-url=http://localhost:5002
 ```
 
+### Multi-Agent Mode (Parallel Processing)
+
+Run multiple agents concurrently to process jobs in parallel:
+
+```bash
+# Run 3 agents for 3x throughput
+ralph-agent --agents=3
+
+# With npm
+npm start -- --agents=3
+
+# Or use convenience scripts
+npm run start:multi      # 3 agents
+npm run start:multi:5    # 5 agents
+
+# Advanced: Use bash scripts for production
+./scripts/start-agents.sh 3
+./scripts/agent-status.sh
+```
+
+**Benefits:**
+- 3x job processing throughput with 3 agents
+- Process isolation - one crash doesn't affect others
+- Full log traceability with agent IDs
+- Easy to scale up/down
+
+**See:** `MULTI_AGENT_USAGE.md` for complete guide
+
 ### Configuration Options
 
 The agent can be configured via environment variables or command-line flags:
@@ -62,6 +91,7 @@ The agent can be configured via environment variables or command-line flags:
 |---------------------|----------|---------|-------------|
 | `RALPH_API_TOKEN` | `--token=` | *Required* | API authentication token |
 | `RALPH_API_URL` | `--api-url=` | `https://ralphblaster.com` | Ralph API base URL |
+| `RALPH_AGENT_ID` | `--agents=` | `agent-default` / `1` | Agent ID or agent count for multi-agent mode |
 | `RALPH_POLL_INTERVAL` | - | `5000` | Polling interval in milliseconds |
 | `RALPH_LOG_LEVEL` | - | `info` | Log level (error, warn, info, debug) |
 | `RALPH_MAX_RETRIES` | - | `3` | Maximum retry attempts |

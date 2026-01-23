@@ -3,6 +3,17 @@
 // Parse command line arguments BEFORE loading modules that use config
 const args = process.argv.slice(2);
 
+// Check for --agents flag (multi-agent mode)
+const agentsIndex = args.findIndex(arg => arg.startsWith('--agents='));
+let agentCount = null;
+if (agentsIndex !== -1) {
+  agentCount = parseInt(args[agentsIndex].split('=')[1], 10);
+  if (isNaN(agentCount) || agentCount < 1 || agentCount > 20) {
+    console.error('Error: --agents flag requires a number between 1 and 20');
+    process.exit(1);
+  }
+}
+
 // Check for --token flag
 const tokenIndex = args.findIndex(arg => arg.startsWith('--token='));
 if (tokenIndex !== -1) {
@@ -39,6 +50,7 @@ Commands:
   init                  Initialize current directory as a RalphBlaster project
 
 Options:
+  --agents=<count>      Run multiple agents concurrently (1-20, default: 1)
   --token=<token>       API token for authentication
   --api-url=<url>       API base URL (default: https://ralphblaster.com)
   --help, -h            Show this help message
@@ -60,8 +72,11 @@ Examples:
   # Initialize and save token (first time setup)
   ralph-agent init --token=your_token_here
 
-  # Run agent (uses token from ~/.ralphblasterrc)
+  # Run single agent (uses token from ~/.ralphblasterrc)
   ralph-agent
+
+  # Run 3 agents concurrently for parallel job processing
+  ralph-agent --agents=3
 
   # Run with environment variable
   RALPH_API_TOKEN=your_token_here ralph-agent
@@ -69,8 +84,11 @@ Examples:
   # Run with custom API URL
   ralph-agent --api-url=http://localhost:3000
 
+  # Use with npm
+  npm start -- --agents=3
+
   # Use npx
-  npx ralph-agent --token=your_token_here
+  npx ralph-agent --token=your_token_here --agents=3
   `);
   process.exit(0);
 }
@@ -93,6 +111,79 @@ if (args.includes('init')) {
   return; // Don't start agent polling loop
 }
 
+// Multi-agent mode: Launch multiple agent processes
+if (agentCount && agentCount > 1) {
+  const { spawn } = require('child_process');
+  const path = require('path');
+
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════════════╗');
+  console.log(`║  Ralph Multi-Agent Manager - Starting ${agentCount} agents  ║`);
+  console.log('╚═══════════════════════════════════════════════════════╝');
+  console.log('');
+
+  const agents = [];
+  const agentProcesses = [];
+
+  // Cleanup function for graceful shutdown
+  const cleanup = () => {
+    console.log('\n\nShutting down all agents...');
+    agentProcesses.forEach((proc, index) => {
+      if (proc && !proc.killed) {
+        console.log(`  Stopping agent-${index + 1} (PID: ${proc.pid})`);
+        proc.kill('SIGTERM');
+      }
+    });
+    setTimeout(() => {
+      console.log('All agents stopped');
+      process.exit(0);
+    }, 500);
+  };
+
+  // Setup signal handlers
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
+
+  // Launch each agent
+  for (let i = 1; i <= agentCount; i++) {
+    const agentId = `agent-${i}`;
+
+    // Spawn agent process with unique ID
+    const agentProcess = spawn('node', [path.join(__dirname, 'ralph-agent.js')], {
+      env: {
+        ...process.env,
+        RALPH_AGENT_ID: agentId
+      },
+      stdio: 'inherit' // Share stdio with parent for unified logging
+    });
+
+    agentProcesses.push(agentProcess);
+
+    // Handle agent exit
+    agentProcess.on('exit', (code, signal) => {
+      if (code !== 0 && code !== null) {
+        console.error(`\nAgent ${agentId} exited with code ${code}`);
+      }
+
+      // If any agent dies unexpectedly, shut down all
+      if (signal || (code && code !== 0)) {
+        console.error(`\nAgent ${agentId} failed, shutting down all agents...`);
+        cleanup();
+      }
+    });
+
+    console.log(`✓ Started ${agentId} (PID: ${agentProcess.pid})`);
+  }
+
+  console.log('');
+  console.log(`All ${agentCount} agents launched. Press Ctrl+C to stop all agents`);
+  console.log('');
+
+  // Keep process alive
+  return;
+}
+
+// Single agent mode (default)
 // Load modules AFTER environment variables are set
 const RalphAgent = require('../src/index');
 const logger = require('../src/logger');

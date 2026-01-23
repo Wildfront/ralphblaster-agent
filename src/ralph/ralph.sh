@@ -191,10 +191,31 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   # Use --continue for iterations after the first to maintain context
   # Run Claude (stdbuf removed - not available on macOS)
   # Use --debug to get detailed error information
+
+  # Start a heartbeat in background to show progress during long runs
+  HEARTBEAT_PID=""
+  (
+    START_TIME=$(date +%s)
+    while true; do
+      sleep 30
+      ELAPSED=$(($(date +%s) - START_TIME))
+      MINUTES=$((ELAPSED / 60))
+      SECONDS=$((ELAPSED % 60))
+      echo "⏱️  Claude agent still working... (${MINUTES}m ${SECONDS}s elapsed)" >&2
+    done
+  ) &
+  HEARTBEAT_PID=$!
+
   if [ "$i" -eq 1 ]; then
     OUTPUT=$(cd "$SCRIPT_DIR" && cat prompt.md | claude --dangerously-skip-permissions --debug 2>&1 | tee /dev/stderr) || true
   else
     OUTPUT=$(cd "$SCRIPT_DIR" && claude --dangerously-skip-permissions --continue --debug 2>&1 | tee /dev/stderr) || true
+  fi
+
+  # Stop heartbeat
+  if [ -n "$HEARTBEAT_PID" ]; then
+    kill $HEARTBEAT_PID 2>/dev/null || true
+    wait $HEARTBEAT_PID 2>/dev/null || true
   fi
 
   # Stop tailing progress file
@@ -213,6 +234,13 @@ for i in $(seq 1 $MAX_ITERATIONS); do
 
   echo ""
   echo "✓ Iteration $i complete at $(date '+%H:%M:%S')"
+
+  # Show user story completion status
+  if [ -f "$PRD_FILE" ]; then
+    COMPLETED_STORIES=$(jq '[.userStories[] | select(.passes==true)] | length' "$PRD_FILE" 2>/dev/null || echo "0")
+    TOTAL_STORIES=$(jq '.userStories | length' "$PRD_FILE" 2>/dev/null || echo "?")
+    echo "📊 Story progress: $COMPLETED_STORIES/$TOTAL_STORIES completed"
+  fi
 
   # Show progress summary from this iteration
   if [ -f "$PROGRESS_FILE" ]; then
