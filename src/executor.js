@@ -34,11 +34,6 @@ class Executor {
 
     logger.info(`Executing ${jobDescription} job #${job.id}`);
 
-    // EXTRA LOUD logging for PRD generation jobs
-    if (job.job_type === 'prd_generation') {
-      logger.info(`🟢🟢🟢 STARTING PRD GENERATION EXECUTION #${job.id} 🟢🟢🟢`);
-    }
-
     // Route to appropriate handler based on job type
     if (job.job_type === 'prd_generation') {
       return await this.executePrdGeneration(job, onProgress, startTime);
@@ -835,6 +830,30 @@ ${this.capturedStderr || 'No stderr captured'}
     if (!this.apiClient || !this.currentJobId) return;
 
     try {
+      // Detect Ralph iteration and progress patterns first (higher priority)
+      const ralphPatterns = [
+        { pattern: /📊 Story progress: (\d+)\/(\d+) completed/i, type: 'story_progress', getMessage: (m) => `${m[1]} of ${m[2]} user stories completed` },
+        { pattern: /⏱️\s+Claude agent still working\.\.\.\s+\((\d+)m (\d+)s elapsed\)/i, type: 'heartbeat', getMessage: (m) => `Still working... (${m[1]}m ${m[2]}s elapsed)` },
+        { pattern: /✓ Iteration (\d+) complete at/i, type: 'iteration_complete', getMessage: (m) => `Completed iteration ${m[1]}` }
+      ];
+
+      for (const { pattern, type, getMessage } of ralphPatterns) {
+        const match = chunk.match(pattern);
+        if (match) {
+          const message = getMessage(match);
+          logger.info(`Ralph progress: ${message}`);
+          this.apiClient.sendStatusEvent(
+            this.currentJobId,
+            type,
+            message,
+            {}
+          ).catch(error => {
+            logger.debug(`Event emission error: ${error.message}`);
+          });
+          return; // Only emit one event per chunk
+        }
+      }
+
       // Detect Claude Code tool usage (Read, Write, Edit, Bash, etc.)
       const toolPatterns = [
         { pattern: /Reading\s+([^\s\n]+)/i, type: 'read_file', getMessage: (m) => `Reading ${path.basename(m[1])}` },

@@ -9,6 +9,12 @@ const LOG_LEVELS = {
 
 const currentLevel = LOG_LEVELS[config.logLevel] || LOG_LEVELS.info;
 
+// Job context for API logging (set when job starts)
+let jobContext = {
+  jobId: null,
+  apiClient: null
+};
+
 /**
  * Redact sensitive data from logs
  * @param {any} data - Data to redact
@@ -70,6 +76,31 @@ function safeStringify(obj) {
   }
 }
 
+/**
+ * Format message with optional data for display
+ * @param {string} message - Log message
+ * @param {*} data - Optional data to append
+ * @returns {string} Formatted message
+ */
+function formatMessage(message, data = null) {
+  if (!data) return message;
+
+  // If data is a simple object with jobId, format it nicely
+  if (typeof data === 'object' && data !== null) {
+    const parts = [];
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== null && value !== undefined) {
+        parts.push(`${key}: ${value}`);
+      }
+    }
+    if (parts.length > 0) {
+      return `${message} (${parts.join(', ')})`;
+    }
+  }
+
+  return message;
+}
+
 function log(level, message, data = null) {
   if (LOG_LEVELS[level] <= currentLevel) {
     const timestamp = new Date().toISOString();
@@ -78,12 +109,23 @@ function log(level, message, data = null) {
     // Redact sensitive data from message
     const safeMessage = redactSensitiveData(message);
 
+    // Format for terminal output
     if (data) {
       // Redact and stringify data
       const redactedData = redactSensitiveData(data);
       console.log(prefix, safeMessage, safeStringify(redactedData));
     } else {
       console.log(prefix, safeMessage);
+    }
+
+    // Send to API if job context is set (for info and error levels only)
+    // This makes internal logs visible in the UI's "Instance Setup Logs" section
+    if (jobContext.apiClient && jobContext.jobId && (level === 'info' || level === 'error')) {
+      const formattedMessage = formatMessage(safeMessage, data);
+      jobContext.apiClient.addSetupLog(jobContext.jobId, level, formattedMessage)
+        .catch(() => {
+          // Silently fail - this is best-effort and we don't want to create circular logging
+        });
     }
   }
 }
@@ -92,5 +134,24 @@ module.exports = {
   error: (msg, data) => log('error', msg, data),
   warn: (msg, data) => log('warn', msg, data),
   info: (msg, data) => log('info', msg, data),
-  debug: (msg, data) => log('debug', msg, data)
+  debug: (msg, data) => log('debug', msg, data),
+
+  /**
+   * Set job context for API logging
+   * When set, info and error logs will be sent to the API's "Instance Setup Logs"
+   * @param {number} jobId - Job ID
+   * @param {Object} apiClient - API client instance
+   */
+  setJobContext: (jobId, apiClient) => {
+    jobContext.jobId = jobId;
+    jobContext.apiClient = apiClient;
+  },
+
+  /**
+   * Clear job context (called when job completes)
+   */
+  clearJobContext: () => {
+    jobContext.jobId = null;
+    jobContext.apiClient = null;
+  }
 };

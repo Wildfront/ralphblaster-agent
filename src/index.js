@@ -133,6 +133,9 @@ class RalphAgent {
     this.jobCompleting = false;
     this.jobStartTime = Date.now(); // Track start time for elapsed time calculation
 
+    // Set logger context so internal logs are sent to UI
+    logger.setJobContext(job.id, this.apiClient);
+
     try {
       // Mark job as running
       await this.apiClient.markJobRunning(job.id);
@@ -176,6 +179,9 @@ class RalphAgent {
 
       logger.error(`Job #${job.id} failed`, error.message);
     } finally {
+      // Clear logger context
+      logger.clearJobContext();
+
       // Clear current job reference and reset completion flag
       this.currentJob = null;
       this.jobCompleting = false;

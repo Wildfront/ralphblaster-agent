@@ -75,12 +75,6 @@ class ApiClient {
 
         logger.info(`Claimed job #${job.id} - ${job.task_title}`);
 
-        // EXTRA LOUD logging for PRD generation jobs to debug visibility issue
-        if (job.job_type === 'prd_generation') {
-          logger.info(`🔴🔴🔴 PRD GENERATION JOB CLAIMED #${job.id} 🔴🔴🔴`);
-          logger.info(`PRD Job Details: ${JSON.stringify({id: job.id, title: job.task_title, mode: job.prd_mode})}`);
-        }
-
         // Log full job details for debugging (especially useful in multi-agent scenarios)
         logger.debug('Job details:', {
           id: job.id,
@@ -304,6 +298,28 @@ class ApiClient {
     } catch (error) {
       logger.warn(`Error updating metadata for job #${jobId}`, error.message);
       // Don't throw - metadata updates are best-effort
+    }
+  }
+
+  /**
+   * Add a setup log entry (appears in "Instance Setup Logs" section of UI)
+   * Best-effort - doesn't fail job if unsuccessful
+   * @param {number} jobId - Job ID
+   * @param {string} level - Log level ('info' or 'error')
+   * @param {string} message - Log message
+   */
+  async addSetupLog(jobId, level, message) {
+    try {
+      await this.client.patch(`/api/v1/ralph/jobs/${jobId}/setup_log`, {
+        level: level,
+        message: message,
+        timestamp: new Date().toISOString()
+      });
+      logger.debug(`Setup log sent for job #${jobId}: [${level}] ${message}`);
+    } catch (error) {
+      logger.debug(`Error sending setup log for job #${jobId}`, error.message);
+      // Don't throw - setup logs are best-effort for UI visibility
+      // Silently fail to avoid disrupting job execution
     }
   }
 
