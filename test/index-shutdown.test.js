@@ -12,7 +12,9 @@ jest.mock('../src/logger', () => ({
   info: jest.fn(),
   debug: jest.fn(),
   warn: jest.fn(),
-  error: jest.fn()
+  error: jest.fn(),
+  setJobContext: jest.fn(),
+  clearJobContext: jest.fn()
 }));
 
 const ApiClient = require('../src/api-client');

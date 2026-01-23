@@ -11,6 +11,14 @@ jest.mock('../src/config', () => ({
   maxRetries: 3,
   logLevel: 'error'
 }));
+jest.mock('../src/logger', () => ({
+  info: jest.fn(),
+  debug: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+  setJobContext: jest.fn(),
+  clearJobContext: jest.fn()
+}));
 
 describe('RalphAgent Poll Loop', () => {
   let agent;
@@ -28,7 +36,8 @@ describe('RalphAgent Poll Loop', () => {
       markJobFailed: jest.fn(),
       sendProgress: jest.fn(),
       sendHeartbeat: jest.fn(),
-      sendStatusEvent: jest.fn().mockResolvedValue()
+      sendStatusEvent: jest.fn().mockResolvedValue(),
+      addSetupLog: jest.fn().mockResolvedValue()
     };
 
     mockExecutor = {

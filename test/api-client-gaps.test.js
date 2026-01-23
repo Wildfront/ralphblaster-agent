@@ -154,7 +154,8 @@ describe('ApiClient - Coverage Gaps', () => {
       });
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Invalid branch name format')
+        expect.stringContaining('Invalid branch name format'),
+        expect.objectContaining({ branchName: 'invalid branch name with spaces!' })
       );
 
       const payload = mockAxiosInstance.patch.mock.calls[0][1];
@@ -238,8 +239,7 @@ describe('ApiClient - Coverage Gaps', () => {
       await apiClient.sendProgress(123, 'chunk');
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Error sending progress'),
-        'Network error'
+        expect.stringContaining('Error sending progress for job #123: Network error')
       );
     });
 
@@ -370,7 +370,7 @@ describe('ApiClient - Coverage Gaps', () => {
 
       const validBranches = [
         'feature/test',
-        'ralph/ticket-1/job-2',
+        'blaster/ticket-1/job-2',
         'main',
         'develop',
         'feature-123',
@@ -409,7 +409,8 @@ describe('ApiClient - Coverage Gaps', () => {
         });
 
         expect(logger.warn).toHaveBeenCalledWith(
-          expect.stringContaining('Invalid branch name format')
+          expect.stringContaining('Invalid branch name format'),
+          expect.objectContaining({ branchName: branch })
         );
       }
     });

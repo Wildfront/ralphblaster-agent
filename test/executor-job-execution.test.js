@@ -226,56 +226,6 @@ describe('Executor - Job Execution', () => {
     });
   });
 
-  describe('parseOutput()', () => {
-    test('extracts RALPH_SUMMARY correctly', () => {
-      const output = 'Some output\nRALPH_SUMMARY: Implemented feature X\nMore output';
-      const result = executor.parseOutput(output);
-
-      expect(result.summary).toBe('Implemented feature X');
-    });
-
-    test('extracts RALPH_BRANCH correctly', () => {
-      const output = 'Some output\nRALPH_BRANCH: feature/test-branch\nMore output';
-      const result = executor.parseOutput(output);
-
-      expect(result.branchName).toBe('feature/test-branch');
-    });
-
-    test('extracts both RALPH_SUMMARY and RALPH_BRANCH', () => {
-      const output = `
-        Output text
-        RALPH_SUMMARY: Added new authentication
-        RALPH_BRANCH: feature/auth
-        More output
-      `;
-      const result = executor.parseOutput(output);
-
-      expect(result.summary).toBe('Added new authentication');
-      expect(result.branchName).toBe('feature/auth');
-    });
-
-    test('handles missing markers gracefully', () => {
-      const output = 'Regular output without markers';
-      const result = executor.parseOutput(output);
-
-      expect(result.summary).toBeNull();
-      expect(result.branchName).toBeNull();
-    });
-
-    test('handles partial markers', () => {
-      const output = 'RALPH_SUMMARY: Summary present\nNo branch marker';
-      const result = executor.parseOutput(output);
-
-      expect(result.summary).toBe('Summary present');
-      expect(result.branchName).toBeNull();
-    });
-
-    test('trims whitespace from extracted values', () => {
-      const output = 'RALPH_SUMMARY:   Trimmed summary   \nRALPH_BRANCH:   trimmed-branch   ';
-      const result = executor.parseOutput(output);
-
-      expect(result.summary).toBe('Trimmed summary');
-      expect(result.branchName).toBe('trimmed-branch');
-    });
-  });
+  // parseOutput() tests removed - function no longer exists in refactored code
+  // The new implementation uses direct Claude execution without RALPH_SUMMARY/RALPH_BRANCH markers
 });

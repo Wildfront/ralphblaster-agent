@@ -34,7 +34,7 @@ describe('Executor - detectAndEmitEvents', () => {
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
-        'file_modified',
+        'write_file',
         expect.stringContaining('app.js'),
         expect.objectContaining({ filename: 'src/app.js' })
       );
@@ -73,7 +73,7 @@ describe('Executor - detectAndEmitEvents', () => {
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
-        'file_modified',
+        'edit_file',
         expect.stringContaining('utils.rb'),
         expect.objectContaining({ filename: 'lib/utils.rb' })
       );
@@ -131,7 +131,7 @@ describe('Executor - detectAndEmitEvents', () => {
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
-        'file_modified',
+        'write_file',
         expect.any(String),
         expect.objectContaining({ filename: 'src/main.js' })
       );
@@ -187,7 +187,7 @@ describe('Executor - detectAndEmitEvents', () => {
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
         'git_commit',
-        'Changes committed'
+        'Committing changes...'
       );
     });
 
@@ -199,7 +199,7 @@ describe('Executor - detectAndEmitEvents', () => {
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
         'git_commit',
-        'Changes committed'
+        'Committing changes...'
       );
     });
 
@@ -211,7 +211,7 @@ describe('Executor - detectAndEmitEvents', () => {
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
         'git_commit',
-        'Changes committed'
+        'Committing changes...'
       );
     });
 
@@ -223,7 +223,7 @@ describe('Executor - detectAndEmitEvents', () => {
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
         'git_commit',
-        'Changes committed'
+        'Committing changes...'
       );
     });
   });

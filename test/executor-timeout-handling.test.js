@@ -302,8 +302,13 @@ describe('Executor - Timeout Handling', () => {
 
       executor.runClaude('Test', '/test', null);
 
-      expect(logger.debug).toHaveBeenCalledWith(
-        'Starting Claude CLI execution with timeout: 7200000ms'
+      expect(logger.info).toHaveBeenCalledWith(
+        'Starting Claude CLI execution',
+        expect.objectContaining({
+          timeout: expect.any(String),
+          workingDirectory: '/test',
+          promptLength: expect.any(Number)
+        })
       );
     });
 

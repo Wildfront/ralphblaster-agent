@@ -218,8 +218,7 @@ describe('Executor - Plan Generation', () => {
 
       await expect(planPromise).rejects.toThrow();
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Plan generation failed for job #5'),
-        expect.any(String)
+        expect.stringContaining('Plan generation failed for job #5')
       );
     });
 

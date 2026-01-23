@@ -1,6 +1,15 @@
 // Config tests need to manipulate environment variables before requiring the module
 // So we'll use a helper to reload the config module with different env vars
 
+// Mock ConfigFileManager before requiring config
+jest.mock('../src/config-file-manager', () => {
+  return jest.fn().mockImplementation(() => ({
+    read: jest.fn().mockReturnValue(null),
+    write: jest.fn(),
+    exists: jest.fn().mockReturnValue(false)
+  }));
+});
+
 describe('Config', () => {
   let originalEnv;
   let consoleErrorSpy;
