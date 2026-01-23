@@ -198,6 +198,7 @@ logger.info('╚═════════════════════�
 logger.info('');
 
 agent.start().catch(error => {
-  logger.error('Fatal error starting agent', error);
+  logger.error('Fatal error starting agent: ' + (error?.message || error));
+  console.error(error); // Also log full error with stack trace
   process.exit(1);
 });

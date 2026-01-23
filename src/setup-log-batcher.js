@@ -1,8 +1,7 @@
-const logger = require('./logger');
-
 /**
  * Batches setup logs to reduce API call overhead
  * Automatically flushes when buffer is full or at regular intervals
+ * Note: Does not use logger module to avoid circular dependency
  */
 class SetupLogBatcher {
   constructor(apiClient, jobId, config = {}) {
@@ -68,14 +67,12 @@ class SetupLogBatcher {
       if (this.useBatchEndpoint && this.apiClient.addSetupLogBatch) {
         // Try batch endpoint (more efficient)
         await this.apiClient.addSetupLogBatch(this.jobId, batch);
-        logger.debug(`Flushed ${batch.length} setup logs (batched)`);
       } else {
         // Fall back to individual sends
         await this.sendIndividually(batch);
       }
     } catch (error) {
       // If batch endpoint fails, try individual sends as fallback
-      logger.debug(`Batch send failed, falling back to individual sends: ${error.message}`);
       await this.sendIndividually(batch);
     }
   }
@@ -91,7 +88,6 @@ class SetupLogBatcher {
     );
 
     await Promise.all(promises);
-    logger.debug(`Flushed ${logs.length} setup logs (individual)`);
   }
 
   /**
