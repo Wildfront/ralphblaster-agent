@@ -4,7 +4,6 @@ const fsPromises = require('fs').promises;
 const path = require('path');
 const logger = require('./logger');
 const WorktreeManager = require('./worktree-manager');
-const RalphInstanceManager = require('./ralph-instance-manager');
 
 // Timing constants
 const PROCESS_KILL_GRACE_PERIOD_MS = 2000;
@@ -378,9 +377,7 @@ Plan Generation completed at: ${new Date().toISOString()}
     this.validatePrompt(prompt);
 
     const worktreeManager = new WorktreeManager();
-    const ralphInstanceManager = new RalphInstanceManager();
     let worktreePath = null;
-    let instancePath = null;
 
     try {
       // Send event: Setup started
@@ -402,28 +399,20 @@ Plan Generation completed at: ${new Date().toISOString()}
         await this.apiClient.sendStatusEvent(job.id, 'progress_update', 'Workspace ready', { percentage: 10 });
       }
 
-      // Create Ralph instance directory with all required files
-      logger.info('Creating Ralph instance...');
-      if (this.apiClient) {
-        await this.apiClient.sendStatusEvent(job.id, 'prompt_prepared', 'Preparing task for Claude...');
-      }
-      instancePath = await ralphInstanceManager.createInstance(worktreePath, prompt, job.id);
-      logger.info(`Ralph instance created at: ${instancePath}`);
-
-      // Get main repo path for environment variables
-      const mainRepoPath = sanitizedPath;
-
       // Send event: Claude starting
       if (this.apiClient) {
         await this.apiClient.sendStatusEvent(job.id, 'claude_started', 'Claude is analyzing and executing the task...');
         await this.apiClient.sendStatusEvent(job.id, 'progress_update', 'Claude started', { percentage: 15 });
       }
 
-      // Run Ralph in the instance directory
-      const output = await this.runRalphInstance(instancePath, worktreePath, mainRepoPath, onProgress);
+      // Run Claude directly in worktree with raw prompt
+      const result = await this.runClaudeDirectly(worktreePath, prompt, job, onProgress);
+
+      // Log git activity details and send to server
+      const gitActivitySummary = await this.logGitActivity(worktreePath, result.branchName, job.id, onProgress);
 
       // Save execution output to persistent log file (survives cleanup)
-      const logDir = path.join(mainRepoPath, '.ralph-logs');
+      const logDir = path.join(sanitizedPath, '.ralph-logs');
       try {
         await fsPromises.mkdir(logDir, { recursive: true });
         const logFile = path.join(logDir, `job-${job.id}.log`);
@@ -433,7 +422,7 @@ Job #${job.id} - ${job.task_title}
 Started: ${new Date(startTime).toISOString()}
 ═══════════════════════════════════════════════════════════
 
-${output}
+${result.output}
 
 ═══════════════════════════════════════════════════════════
 Execution completed at: ${new Date().toISOString()}
@@ -449,84 +438,24 @@ Execution completed at: ${new Date().toISOString()}
           await fsPromises.writeFile(errorLogFile, stderrContent);
           logger.info(`Error output saved to: ${errorLogFile}`);
         }
-
-        // Also copy progress.txt, prd.json, and prd-conversion.log to logs
-        try {
-          const progressFile = path.join(instancePath, 'progress.txt');
-          const prdFile = path.join(instancePath, 'prd.json');
-          const conversionLogFile = path.join(instancePath, 'prd-conversion.log');
-
-          if (await fsPromises.access(progressFile).then(() => true).catch(() => false)) {
-            await fsPromises.copyFile(progressFile, path.join(logDir, `job-${job.id}-progress.txt`));
-          }
-          if (await fsPromises.access(prdFile).then(() => true).catch(() => false)) {
-            await fsPromises.copyFile(prdFile, path.join(logDir, `job-${job.id}-prd.json`));
-          }
-          if (await fsPromises.access(conversionLogFile).then(() => true).catch(() => false)) {
-            await fsPromises.copyFile(conversionLogFile, path.join(logDir, `job-${job.id}-prd-conversion.log`));
-          }
-        } catch (copyError) {
-          logger.warn(`Failed to copy instance files to log: ${copyError.message}`);
-        }
       } catch (logError) {
         logger.warn(`Failed to save execution log: ${logError.message}`);
       }
-
-      // Check for completion signal
-      const isComplete = ralphInstanceManager.hasCompletionSignal(output);
-
-      // Read progress summary from progress.txt
-      const progressSummary = await ralphInstanceManager.readProgressSummary(instancePath);
-
-      // Get branch name from prd.json
-      const branchName = await ralphInstanceManager.getBranchName(instancePath) || worktreeManager.getBranchName(job);
-
-      // Build execution summary
-      const executionSummaryLines = [];
-      executionSummaryLines.push('');
-      executionSummaryLines.push('═══════════════════════════════════════════════════════════');
-      executionSummaryLines.push(`Ralph Execution Summary for Job #${job.id}`);
-      executionSummaryLines.push('═══════════════════════════════════════════════════════════');
-      executionSummaryLines.push(`Task: ${job.task_title}`);
-      executionSummaryLines.push(`Branch: ${branchName}`);
-      executionSummaryLines.push(`Completed: ${isComplete ? 'YES ✓' : 'NO (max iterations reached)'}`);
-      executionSummaryLines.push('');
-      executionSummaryLines.push('Progress Summary:');
-      executionSummaryLines.push(progressSummary);
-      executionSummaryLines.push('');
-
-      const executionSummary = executionSummaryLines.join('\n');
-
-      // Log to console
-      logger.info(executionSummary);
-
-      // Send to server via progress callback
-      if (onProgress) {
-        onProgress(executionSummary);
-      }
-
-      // Log git activity details and send to server
-      const gitActivitySummary = await this.logGitActivity(worktreePath, branchName, job.id, onProgress);
 
       const executionTimeMs = Date.now() - startTime;
 
       // Send completion events
       if (this.apiClient) {
         await this.apiClient.sendStatusEvent(job.id, 'progress_update', 'Finalizing...', { percentage: 95 });
-        await this.apiClient.sendStatusEvent(
-          job.id,
-          'job_completed',
-          isComplete ? 'Task completed successfully' : 'Task reached max iterations'
-        );
+        await this.apiClient.sendStatusEvent(job.id, 'job_completed', 'Task completed successfully');
         await this.apiClient.sendStatusEvent(job.id, 'progress_update', 'Complete', { percentage: 100 });
       }
 
       return {
-        output: output,
-        summary: progressSummary || `Completed task: ${job.task_title}`,
-        branchName: branchName,
+        output: result.output,
+        summary: `Completed task: ${job.task_title}`,
+        branchName: result.branchName,
         executionTimeMs: executionTimeMs,
-        ralphComplete: isComplete,
         gitActivity: {
           commitCount: gitActivitySummary.commitCount,
           lastCommit: gitActivitySummary.lastCommitInfo,
@@ -943,6 +872,213 @@ ${this.capturedStderr || 'No stderr captured'}
   }
 
   /**
+   * Run Claude Code directly in worktree with raw prompt
+   * @param {string} worktreePath - Path to worktree
+   * @param {string} prompt - Raw PRD/task description (from job.prompt)
+   * @param {Object} job - Job object for progress updates
+   * @param {Function} onProgress - Progress callback
+   * @returns {Promise<{output: string, branchName: string, duration: number}>}
+   */
+  async runClaudeDirectly(worktreePath, prompt, job, onProgress) {
+    const startTime = Date.now();
+    const timeout = 7200000; // 2 hours (same as current runClaude)
+
+    logger.info(`Running Claude Code in worktree: ${worktreePath}`, {
+      timeout: this.formatDuration(timeout),
+      workingDirectory: worktreePath,
+      promptLength: prompt.length
+    });
+
+    logger.event('claude_started', {
+      component: 'executor',
+      operation: 'claude_direct',
+      worktreePath
+    });
+
+    // Spawn Claude with same flags as current implementation
+    logger.info('Spawning Claude CLI process with --permission-mode acceptEdits --debug');
+    const claudeProcess = spawn('claude', ['--permission-mode', 'acceptEdits', '--debug'], {
+      cwd: worktreePath,
+      shell: false,  // Security: don't use shell
+      env: this.getSanitizedEnv()  // Use existing sanitization method
+    });
+
+    // Set timeout (same as current runClaude)
+    const timer = setTimeout(() => {
+      logger.error(`Claude CLI timed out after ${timeout}ms`);
+      claudeProcess.kill('SIGTERM');
+    }, timeout);
+
+    // Track process for shutdown cleanup
+    this.currentProcess = claudeProcess;
+
+    // Send prompt via stdin (safe from injection)
+    try {
+      claudeProcess.stdin.write(prompt);
+      claudeProcess.stdin.end();
+      logger.info('Prompt successfully written to Claude CLI stdin');
+    } catch (err) {
+      logger.error('Failed to write prompt to Claude CLI stdin', { error: err.message });
+      clearTimeout(timer);
+      throw new Error(`Failed to write prompt to Claude: ${err.message}`);
+    }
+
+    let output = '';
+    let errorOutput = '';
+    let lastLogTime = Date.now();
+    const LOG_INTERVAL = 10000; // Log progress every 10 seconds
+
+    return new Promise((resolve, reject) => {
+      // Capture stdout and stream to API
+      // NOTE: Sends FULL Claude output to API/UI in real-time
+      // This includes all tool calls, file reads, reasoning, etc.
+      claudeProcess.stdout.on('data', async (data) => {
+        const chunk = data.toString();
+        output += chunk;
+
+        // Stream progress to API in real-time (full output)
+        if (this.apiClient) {
+          try {
+            await this.apiClient.sendProgress(job.id, chunk, {
+              component: 'claude',
+              operation: 'execution'
+            });
+          } catch (err) {
+            logger.warn(`Failed to send progress to API: ${err.message}`);
+          }
+        }
+
+        // Detect and emit events from stdout
+        this.detectAndEmitEvents(chunk);
+
+        // Call onProgress callback (for backwards compatibility)
+        if (onProgress) {
+          onProgress(chunk);
+        }
+
+        // Log locally (periodically to avoid spam)
+        const now = Date.now();
+        if (now - lastLogTime > LOG_INTERVAL) {
+          logger.info(`Claude still running... (${Math.floor((now - startTime) / 1000)}s elapsed)`);
+          lastLogTime = now;
+        }
+      });
+
+      // Capture stderr
+      claudeProcess.stderr.on('data', (data) => {
+        const chunk = data.toString();
+        errorOutput += chunk;
+        // Save to instance variable for log file
+        this.capturedStderr = (this.capturedStderr || '') + chunk;
+        logger.warn('Claude stderr:', chunk.substring(0, 500));
+
+        // Detect and emit events from stderr (Claude outputs a lot to stderr)
+        this.detectAndEmitEvents(chunk);
+
+        // Also send stderr to API for debugging
+        if (onProgress) {
+          onProgress(chunk);
+        }
+      });
+
+      // Wait for completion
+      claudeProcess.on('close', async (code) => {
+        clearTimeout(timer);
+        this.currentProcess = null;
+        const duration = Date.now() - startTime;
+
+        if (code === 0) {
+          logger.info(`Claude completed successfully in ${this.formatDuration(duration)}`);
+
+          // Get branch name from worktree
+          const branchName = await this.getCurrentBranch(worktreePath);
+
+          resolve({
+            output,
+            branchName,
+            duration
+          });
+        } else {
+          logger.error(`Claude failed with code ${code}`);
+
+          // Use existing error categorization
+          const baseError = new Error(`Claude CLI failed with exit code ${code}: ${errorOutput}`);
+          const errorInfo = this.categorizeError(baseError, errorOutput, code);
+
+          // Create enriched error (same pattern as existing runClaude)
+          const enrichedError = new Error(errorInfo.userMessage);
+          enrichedError.category = errorInfo.category;
+          enrichedError.technicalDetails = errorInfo.technicalDetails;
+          enrichedError.partialOutput = output;
+
+          reject(enrichedError);
+        }
+      });
+
+      claudeProcess.on('error', (err) => {
+        clearTimeout(timer);
+        this.currentProcess = null;
+        logger.error(`Failed to spawn Claude CLI: ${err.message}`);
+
+        // Use existing error categorization
+        const errorInfo = this.categorizeError(err, errorOutput, null);
+
+        const enrichedError = new Error(errorInfo.userMessage);
+        enrichedError.category = errorInfo.category;
+        enrichedError.technicalDetails = errorInfo.technicalDetails;
+        enrichedError.partialOutput = output;
+
+        reject(enrichedError);
+      });
+    });
+  }
+
+  /**
+   * Helper to run git commands in worktree
+   * @param {string} cwd - Working directory
+   * @param {Array<string>} args - Git command arguments
+   * @returns {Promise<string>} Command output
+   */
+  async runGitCommand(cwd, args) {
+    return new Promise((resolve, reject) => {
+      const git = spawn('git', args, { cwd });
+      let output = '';
+
+      git.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      git.on('close', (code) => {
+        if (code === 0) {
+          resolve(output);
+        } else {
+          reject(new Error(`Git command failed with code ${code}`));
+        }
+      });
+
+      git.on('error', reject);
+    });
+  }
+
+  /**
+   * Get current branch name from worktree
+   * @param {string} worktreePath - Path to worktree
+   * @returns {Promise<string>} Branch name
+   */
+  async getCurrentBranch(worktreePath) {
+    try {
+      const branch = await this.runGitCommand(
+        worktreePath,
+        ['rev-parse', '--abbrev-ref', 'HEAD']
+      );
+      return branch.trim();
+    } catch (err) {
+      logger.error(`Failed to get branch name: ${err.message}`);
+      return 'unknown';
+    }
+  }
+
+  /**
    * Detect and emit structured events from Claude output
    * Analyzes output chunks for common patterns and sends status events to UI
    * @param {string} chunk - Output chunk from Claude
@@ -951,30 +1087,6 @@ ${this.capturedStderr || 'No stderr captured'}
     if (!this.apiClient || !this.currentJobId) return;
 
     try {
-      // Detect Ralph iteration and progress patterns first (higher priority)
-      const ralphPatterns = [
-        { pattern: /📊 Story progress: (\d+)\/(\d+) completed/i, type: 'story_progress', getMessage: (m) => `${m[1]} of ${m[2]} user stories completed` },
-        { pattern: /⏱️\s+Claude agent still working\.\.\.\s+\((\d+)m (\d+)s elapsed\)/i, type: 'heartbeat', getMessage: (m) => `Still working... (${m[1]}m ${m[2]}s elapsed)` },
-        { pattern: /✓ Iteration (\d+) complete at/i, type: 'iteration_complete', getMessage: (m) => `Completed iteration ${m[1]}` }
-      ];
-
-      for (const { pattern, type, getMessage } of ralphPatterns) {
-        const match = chunk.match(pattern);
-        if (match) {
-          const message = getMessage(match);
-          logger.info(`Ralph progress: ${message}`);
-          this.apiClient.sendStatusEvent(
-            this.currentJobId,
-            type,
-            message,
-            {}
-          ).catch(error => {
-            logger.debug(`Event emission error: ${error.message}`);
-          });
-          return; // Only emit one event per chunk
-        }
-      }
-
       // Detect Claude Code tool usage (Read, Write, Edit, Bash, etc.)
       const toolPatterns = [
         { pattern: /Reading\s+([^\s\n]+)/i, type: 'read_file', getMessage: (m) => `Reading ${path.basename(m[1])}` },
@@ -1086,19 +1198,6 @@ ${this.capturedStderr || 'No stderr captured'}
         return;
       }
 
-      // Detect completion signals
-      if (/<promise>COMPLETE<\/promise>/i.test(chunk)) {
-        logger.debug('Completion promise detected');
-        this.apiClient.sendStatusEvent(
-          this.currentJobId,
-          'completion_detected',
-          'Task completed'
-        ).catch(error => {
-          logger.debug(`Event emission error: ${error.message}`);
-        });
-        return;
-      }
-
       // Detect cleanup phase
       if (/cleanup|cleaning up|removing temporary/i.test(chunk)) {
         logger.debug('Cleanup phase detected');
@@ -1117,140 +1216,7 @@ ${this.capturedStderr || 'No stderr captured'}
     }
   }
 
-  /**
-   * Run Ralph autonomous agent in instance directory
-   * @param {string} instancePath - Path to Ralph instance directory
-   * @param {string} worktreePath - Path to git worktree
-   * @param {string} mainRepoPath - Path to main repository
-   * @param {Function} onProgress - Progress callback
-   * @param {number} timeout - Timeout in milliseconds (default: 2 hours)
-   * @returns {Promise<string>} Command output
-   */
-  runRalphInstance(instancePath, worktreePath, mainRepoPath, onProgress, timeout = 7200000) {
-    return new Promise((resolve, reject) => {
-      logger.debug(`Starting Ralph execution with timeout: ${timeout}ms`);
 
-      const ralphShPath = path.join(instancePath, 'ralph.sh');
-
-      // Execute ralph.sh with required environment variables
-      const ralph = spawn(ralphShPath, ['10'], { // Max 10 iterations
-        cwd: instancePath,
-        shell: false,
-        env: {
-          ...this.getSanitizedEnv(),
-          RALPH_WORKTREE_PATH: worktreePath,
-          RALPH_INSTANCE_DIR: instancePath,
-          RALPH_MAIN_REPO: mainRepoPath
-        }
-      });
-
-      // Set timeout
-      const timer = setTimeout(() => {
-        logger.error(`Ralph execution timed out after ${timeout}ms`);
-        ralph.kill('SIGTERM');
-        reject(new Error(`Ralph execution timed out after ${timeout}ms`));
-      }, timeout);
-
-      // Track process for shutdown cleanup
-      this.currentProcess = ralph;
-
-      let stdout = '';
-      let stderr = '';
-
-      ralph.stdout.on('data', (data) => {
-        const chunk = data.toString();
-        stdout += chunk;
-        logger.debug('Ralph output:', chunk);
-
-        // Detect and emit structured events from Claude output
-        this.detectAndEmitEvents(chunk);
-
-        // Stream output to progress callback
-        if (onProgress) {
-          onProgress(chunk);
-        }
-      });
-
-      ralph.stderr.on('data', (data) => {
-        const stderrChunk = data.toString();
-        stderr += stderrChunk;
-        // Save to instance variable for log file
-        this.capturedStderr = (this.capturedStderr || '') + stderrChunk;
-        logger.debug('Ralph stderr:', stderrChunk);
-
-        // Detect and emit events from stderr too (Claude outputs a lot to stderr)
-        this.detectAndEmitEvents(stderrChunk);
-
-        // Stream stderr to progress callback for visibility
-        if (onProgress) {
-          onProgress(stderrChunk);
-        }
-      });
-
-      ralph.on('close', (code) => {
-        clearTimeout(timer);
-        this.currentProcess = null;
-
-        // Ralph exits with 0 on completion, 1 on max iterations without completion
-        if (code === 0 || code === 1) {
-          logger.debug(`Ralph execution completed with code ${code}`);
-          resolve(stdout);
-        } else {
-          logger.error(`Ralph exited with code ${code}`);
-          const baseError = new Error(`Ralph failed with exit code ${code}: ${stderr}`);
-          const errorInfo = this.categorizeError(baseError, stderr, code);
-
-          const enrichedError = new Error(errorInfo.userMessage);
-          enrichedError.category = errorInfo.category;
-          enrichedError.technicalDetails = errorInfo.technicalDetails;
-          enrichedError.partialOutput = stdout;
-
-          reject(enrichedError);
-        }
-      });
-
-      ralph.on('error', (error) => {
-        clearTimeout(timer);
-        this.currentProcess = null;
-        logger.error('Failed to spawn Ralph', error.message);
-
-        const errorInfo = this.categorizeError(error, stderr, null);
-
-        const enrichedError = new Error(errorInfo.userMessage);
-        enrichedError.category = errorInfo.category;
-        enrichedError.technicalDetails = errorInfo.technicalDetails;
-        enrichedError.partialOutput = stdout;
-
-        reject(enrichedError);
-      });
-    });
-  }
-
-  /**
-   * Parse Claude output for summary and branch name
-   * @param {string} output - Claude output
-   * @returns {Object} Parsed result
-   */
-  parseOutput(output) {
-    const result = {
-      summary: null,
-      branchName: null
-    };
-
-    // Look for RALPH_SUMMARY: marker
-    const summaryMatch = output.match(/RALPH_SUMMARY:\s*(.+?)(?:\n|$)/);
-    if (summaryMatch) {
-      result.summary = summaryMatch[1].trim();
-    }
-
-    // Look for RALPH_BRANCH: marker
-    const branchMatch = output.match(/RALPH_BRANCH:\s*(.+?)(?:\n|$)/);
-    if (branchMatch) {
-      result.branchName = branchMatch[1].trim();
-    }
-
-    return result;
-  }
 
   /**
    * Log git activity details for a job
