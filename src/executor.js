@@ -285,16 +285,20 @@ Execution completed at: ${new Date().toISOString()}
         await fsPromises.writeFile(logFile, logContent);
         logger.info(`Execution log saved to: ${logFile}`);
 
-        // Also copy progress.txt and prd.json to logs
+        // Also copy progress.txt, prd.json, and prd-conversion.log to logs
         try {
           const progressFile = path.join(instancePath, 'progress.txt');
           const prdFile = path.join(instancePath, 'prd.json');
+          const conversionLogFile = path.join(instancePath, 'prd-conversion.log');
 
           if (await fsPromises.access(progressFile).then(() => true).catch(() => false)) {
             await fsPromises.copyFile(progressFile, path.join(logDir, `job-${job.id}-progress.txt`));
           }
           if (await fsPromises.access(prdFile).then(() => true).catch(() => false)) {
             await fsPromises.copyFile(prdFile, path.join(logDir, `job-${job.id}-prd.json`));
+          }
+          if (await fsPromises.access(conversionLogFile).then(() => true).catch(() => false)) {
+            await fsPromises.copyFile(conversionLogFile, path.join(logDir, `job-${job.id}-prd-conversion.log`));
           }
         } catch (copyError) {
           logger.warn(`Failed to copy instance files to log: ${copyError.message}`);
