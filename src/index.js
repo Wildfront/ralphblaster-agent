@@ -140,8 +140,13 @@ class RalphAgent {
     this.jobCompleting = false;
     this.jobStartTime = Date.now(); // Track start time for elapsed time calculation
 
-    // Set logger context so internal logs are sent to UI
-    logger.setJobContext(job.id, this.apiClient);
+    // Set logger context so internal logs are sent to UI (Phase 3: with global context)
+    logger.setJobContext(job.id, this.apiClient, {
+      jobType: job.job_type,
+      taskTitle: job.task_title,
+      projectId: job.project?.id,
+      projectName: job.project?.name
+    });
 
     try {
       // Mark job as running

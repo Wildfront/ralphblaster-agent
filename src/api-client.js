@@ -310,14 +310,22 @@ class ApiClient {
    * @param {number} jobId - Job ID
    * @param {string} level - Log level ('info' or 'error')
    * @param {string} message - Log message
+   * @param {Object} metadata - Optional structured metadata (Phase 3)
    */
-  async addSetupLog(jobId, level, message) {
+  async addSetupLog(jobId, level, message, metadata = null) {
     try {
-      await this.client.patch(`/api/v1/ralph/jobs/${jobId}/setup_log`, {
+      const payload = {
         level: level,
         message: message,
         timestamp: new Date().toISOString()
-      });
+      };
+
+      // Add metadata if present (Phase 3)
+      if (metadata && Object.keys(metadata).length > 0) {
+        payload.metadata = metadata;
+      }
+
+      await this.client.patch(`/api/v1/ralph/jobs/${jobId}/setup_log`, payload);
       logger.debug(`Setup log sent for job #${jobId}: [${level}] ${message}`);
     } catch (error) {
       logger.debug(`Error sending setup log for job #${jobId}`, error.message);

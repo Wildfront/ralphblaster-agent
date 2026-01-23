@@ -26,19 +26,27 @@ class SetupLogBatcher {
    * Add a log entry to the buffer
    * @param {string} level - Log level ('info' or 'error')
    * @param {string} message - Log message
+   * @param {Object} metadata - Optional structured metadata (Phase 3)
    */
-  add(level, message) {
+  add(level, message, metadata = null) {
     if (this.isShuttingDown) {
       // If shutting down, send immediately without batching
-      this.apiClient.addSetupLog(this.jobId, level, message).catch(() => {});
+      this.apiClient.addSetupLog(this.jobId, level, message, metadata).catch(() => {});
       return;
     }
 
-    this.buffer.push({
+    const logEntry = {
       timestamp: new Date().toISOString(),
       level: level,
       message: message
-    });
+    };
+
+    // Add metadata if present (Phase 3)
+    if (metadata && Object.keys(metadata).length > 0) {
+      logEntry.metadata = metadata;
+    }
+
+    this.buffer.push(logEntry);
 
     // Flush if buffer is full
     if (this.buffer.length >= this.maxBatchSize) {
@@ -78,7 +86,7 @@ class SetupLogBatcher {
    */
   async sendIndividually(logs) {
     const promises = logs.map(log =>
-      this.apiClient.addSetupLog(this.jobId, log.level, log.message)
+      this.apiClient.addSetupLog(this.jobId, log.level, log.message, log.metadata)
         .catch(() => {}) // Silently fail individual logs
     );
 

@@ -14,52 +14,98 @@ const logger = require('./logger');
  */
 class WorktreeManager {
   /**
-   * Create a new worktree for a job
+   * Create a new worktree for a job with retry logic for multi-agent safety
    * @param {Object} job - The job object with id, task, and project
+   * @param {number} maxRetries - Maximum number of retry attempts (default: 3)
    * @returns {Promise<string>} - The absolute path to the worktree
    */
-  async createWorktree(job) {
+  async createWorktree(job, maxRetries = 3) {
     const worktreePath = this.getWorktreePath(job)
     const branchName = this.getBranchName(job)
     const systemPath = job.project.system_path
 
-    logger.info(`Creating worktree for job ${job.id}`, {
-      worktreePath,
-      branchName,
+    // Phase 3: Use event for structured logging
+    logger.event('worktree.creating', {
+      component: 'worktree',
+      operation: 'create',
+      path: worktreePath,
+      branch: branchName,
       systemPath
     })
 
-    try {
-      // Verify git is available
-      await this.execGit(systemPath, ['--version'], 5000)
-
-      // Check if worktree already exists (from a previous failed run)
+    // Retry loop with exponential backoff for handling concurrent worktree operations
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        await fs.access(worktreePath)
-        logger.warn(`Worktree already exists at ${worktreePath}, removing stale worktree`)
-        await this.removeWorktree(job)
-      } catch (err) {
-        // Worktree doesn't exist, which is expected
+        // Verify git is available
+        await this.execGit(systemPath, ['--version'], 5000)
+
+        // Check if worktree already exists (from a previous failed run)
+        try {
+          await fs.access(worktreePath)
+          logger.warn(`Worktree already exists at ${worktreePath}, removing stale worktree (attempt ${attempt}/${maxRetries})`)
+          await this.removeWorktree(job)
+          // Wait a bit after removal to ensure filesystem consistency
+          await this.sleep(500)
+        } catch (err) {
+          // Worktree doesn't exist, which is expected
+        }
+
+        // Create the worktree with a new branch
+        // -b creates a new branch, --detach would checkout without branch
+        await this.execGit(
+          systemPath,
+          ['worktree', 'add', '-b', branchName, worktreePath, 'HEAD'],
+          30000
+        )
+
+        // Phase 3: Use event for structured logging
+        logger.event('worktree.created', {
+          component: 'worktree',
+          operation: 'create',
+          path: worktreePath,
+          branch: branchName
+        })
+        return worktreePath
+      } catch (error) {
+        const isLastAttempt = attempt === maxRetries
+
+        // Check if this is a lock/collision error that might be resolved by retrying
+        const isRetryableError =
+          error.message.includes('already exists') ||
+          error.message.includes('already locked') ||
+          error.message.includes('unable to create') ||
+          error.message.includes('fatal: could not lock');
+
+        if (isRetryableError && !isLastAttempt) {
+          // Exponential backoff: 1s, 2s, 4s
+          const backoffMs = 1000 * Math.pow(2, attempt - 1);
+          logger.warn(`Worktree creation failed (attempt ${attempt}/${maxRetries}), retrying in ${backoffMs}ms`, {
+            error: error.message
+          })
+          await this.sleep(backoffMs)
+          continue
+        }
+
+        // Non-retryable error or last attempt - throw
+        logger.error(`Failed to create worktree for job ${job.id} (attempt ${attempt}/${maxRetries})`, {
+          error: error.message,
+          worktreePath,
+          branchName
+        })
+        throw new Error(`Failed to create worktree: ${error.message}`)
       }
-
-      // Create the worktree with a new branch
-      // -b creates a new branch, --detach would checkout without branch
-      await this.execGit(
-        systemPath,
-        ['worktree', 'add', '-b', branchName, worktreePath, 'HEAD'],
-        30000
-      )
-
-      logger.info(`Created worktree: ${worktreePath}`)
-      return worktreePath
-    } catch (error) {
-      logger.error(`Failed to create worktree for job ${job.id}`, {
-        error: error.message,
-        worktreePath,
-        branchName
-      })
-      throw new Error(`Failed to create worktree: ${error.message}`)
     }
+
+    // Should never reach here, but just in case
+    throw new Error('Failed to create worktree after all retry attempts')
+  }
+
+  /**
+   * Sleep helper for retry logic
+   * @param {number} ms - Milliseconds to sleep
+   */
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms))
   }
 
   /**
@@ -71,9 +117,12 @@ class WorktreeManager {
     const branchName = this.getBranchName(job)
     const systemPath = job.project.system_path
 
-    logger.info(`Removing worktree for job ${job.id}`, {
-      worktreePath,
-      branchName
+    // Phase 3: Use event for structured logging
+    logger.event('worktree.removing', {
+      component: 'worktree',
+      operation: 'remove',
+      path: worktreePath,
+      branch: branchName
     })
 
     try {
@@ -84,7 +133,12 @@ class WorktreeManager {
         30000
       )
 
-      logger.info(`Removed worktree: ${worktreePath}`)
+      // Phase 3: Use event for structured logging
+      logger.event('worktree.removed', {
+        component: 'worktree',
+        operation: 'remove',
+        path: worktreePath
+      })
     } catch (error) {
       // Log error but don't throw - cleanup is best-effort
       logger.error(`Failed to remove worktree for job ${job.id}`, {
