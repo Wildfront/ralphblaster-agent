@@ -13,7 +13,9 @@ const LONG_POLLING_TIMEOUT_MS = (SERVER_LONG_POLL_TIMEOUT_S * 1000) + NETWORK_BU
 const REGULAR_API_TIMEOUT_MS = 15000;  // 15s for regular API calls
 
 class ApiClient {
-  constructor() {
+  constructor(agentId = 'agent-default') {
+    this.agentId = agentId;
+
     this.client = axios.create({
       baseURL: config.apiUrl,
       headers: {
@@ -26,6 +28,7 @@ class ApiClient {
     this.client.interceptors.request.use((requestConfig) => {
       requestConfig.headers.Authorization = `Bearer ${config.apiToken}`;
       requestConfig.headers['X-Agent-Version'] = AGENT_VERSION;
+      requestConfig.headers['X-Agent-ID'] = this.agentId;
       return requestConfig;
     });
 
@@ -320,6 +323,28 @@ class ApiClient {
       logger.debug(`Error sending setup log for job #${jobId}`, error.message);
       // Don't throw - setup logs are best-effort for UI visibility
       // Silently fail to avoid disrupting job execution
+    }
+  }
+
+  /**
+   * Add multiple setup log entries in a single batch (more efficient)
+   * Best-effort - doesn't fail job if unsuccessful
+   * @param {number} jobId - Job ID
+   * @param {Array} logs - Array of log objects with {timestamp, level, message}
+   */
+  async addSetupLogBatch(jobId, logs) {
+    if (!logs || logs.length === 0) return;
+
+    try {
+      await this.client.post(`/api/v1/ralph/jobs/${jobId}/setup_logs`, {
+        logs: logs
+      });
+      logger.debug(`Batch setup logs sent for job #${jobId}: ${logs.length} logs`);
+    } catch (error) {
+      logger.debug(`Error sending batch setup logs for job #${jobId}`, error.message);
+      // Don't throw - setup logs are best-effort for UI visibility
+      // Silently fail to avoid disrupting job execution
+      throw error; // Rethrow so batcher can fall back to individual sends
     }
   }
 

@@ -1,4 +1,5 @@
 const config = require('./config');
+const SetupLogBatcher = require('./setup-log-batcher');
 
 const LOG_LEVELS = {
   error: 0,
@@ -9,10 +10,13 @@ const LOG_LEVELS = {
 
 const currentLevel = LOG_LEVELS[config.logLevel] || LOG_LEVELS.info;
 
+// Agent ID for multi-agent support (set when agent starts)
+let agentId = null;
+
 // Job context for API logging (set when job starts)
 let jobContext = {
   jobId: null,
-  apiClient: null
+  batcher: null  // SetupLogBatcher instance for batched log sending
 };
 
 /**
@@ -104,7 +108,17 @@ function formatMessage(message, data = null) {
 function log(level, message, data = null) {
   if (LOG_LEVELS[level] <= currentLevel) {
     const timestamp = new Date().toISOString();
-    const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
+    let prefix = `[${timestamp}] [${level.toUpperCase()}]`;
+
+    // Add agent ID to prefix for multi-agent traceability
+    if (agentId) {
+      prefix += ` [${agentId}]`;
+    }
+
+    // Add job ID to prefix if processing a job
+    if (jobContext.jobId) {
+      prefix += ` [job-${jobContext.jobId}]`;
+    }
 
     // Redact sensitive data from message
     const safeMessage = redactSensitiveData(message);
@@ -120,12 +134,10 @@ function log(level, message, data = null) {
 
     // Send to API if job context is set (for info and error levels only)
     // This makes internal logs visible in the UI's "Instance Setup Logs" section
-    if (jobContext.apiClient && jobContext.jobId && (level === 'info' || level === 'error')) {
+    // Uses batching to reduce API overhead (10 logs -> 1 API call)
+    if (jobContext.batcher && (level === 'info' || level === 'error')) {
       const formattedMessage = formatMessage(safeMessage, data);
-      jobContext.apiClient.addSetupLog(jobContext.jobId, level, formattedMessage)
-        .catch(() => {
-          // Silently fail - this is best-effort and we don't want to create circular logging
-        });
+      jobContext.batcher.add(level, formattedMessage);
     }
   }
 }
@@ -137,21 +149,42 @@ module.exports = {
   debug: (msg, data) => log('debug', msg, data),
 
   /**
+   * Set agent ID for multi-agent support
+   * @param {string} id - Agent ID (e.g., 'agent-1', 'agent-2')
+   */
+  setAgentId: (id) => {
+    agentId = id;
+  },
+
+  /**
    * Set job context for API logging
    * When set, info and error logs will be sent to the API's "Instance Setup Logs"
+   * Uses batching to reduce API overhead (flushes every 2s or when 10 logs buffered)
    * @param {number} jobId - Job ID
    * @param {Object} apiClient - API client instance
    */
   setJobContext: (jobId, apiClient) => {
     jobContext.jobId = jobId;
-    jobContext.apiClient = apiClient;
+
+    // Create batcher for efficient log sending
+    jobContext.batcher = new SetupLogBatcher(apiClient, jobId, {
+      maxBatchSize: 10,      // Flush when 10 logs buffered
+      flushInterval: 2000,   // Flush every 2 seconds
+      useBatchEndpoint: true // Try batch endpoint first, fall back to individual
+    });
   },
 
   /**
    * Clear job context (called when job completes)
+   * Ensures all buffered logs are flushed before shutdown
    */
-  clearJobContext: () => {
+  clearJobContext: async () => {
+    // Shutdown batcher and flush remaining logs
+    if (jobContext.batcher) {
+      await jobContext.batcher.shutdown();
+      jobContext.batcher = null;
+    }
+
     jobContext.jobId = null;
-    jobContext.apiClient = null;
   }
 };

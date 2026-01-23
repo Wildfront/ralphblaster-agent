@@ -10,7 +10,10 @@ const HEARTBEAT_INTERVAL_MS = 60000;
 
 class RalphAgent {
   constructor() {
-    this.apiClient = new ApiClient();
+    // Agent ID for multi-agent support
+    this.agentId = process.env.RALPH_AGENT_ID || 'agent-default';
+
+    this.apiClient = new ApiClient(this.agentId);
     this.executor = new Executor(this.apiClient);
     this.isRunning = false;
     this.currentJob = null;
@@ -30,7 +33,11 @@ class RalphAgent {
   async start() {
     this.isRunning = true;
 
+    // Set agent ID in logger context
+    logger.setAgentId(this.agentId);
+
     logger.info('Ralph Agent starting...');
+    logger.info(`Agent ID: ${this.agentId}`);
     logger.info(`API URL: ${config.apiUrl}`);
 
     // Setup graceful shutdown
@@ -179,8 +186,8 @@ class RalphAgent {
 
       logger.error(`Job #${job.id} failed`, error.message);
     } finally {
-      // Clear logger context
-      logger.clearJobContext();
+      // Clear logger context (flush remaining batched logs)
+      await logger.clearJobContext();
 
       // Clear current job reference and reset completion flag
       this.currentJob = null;
