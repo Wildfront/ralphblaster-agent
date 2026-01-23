@@ -121,29 +121,38 @@ class Executor {
   async executeStandardPrd(job, onProgress, startTime) {
     // Server must provide prompt
     if (!job.prompt || !job.prompt.trim()) {
+      logger.error('No prompt provided by server for PRD generation');
       throw new Error('No prompt provided by server');
     }
 
     // Use the server-provided prompt (already formatted with template system)
     const prompt = job.prompt;
-    logger.debug('Using server-provided prompt');
+    logger.info('Server-provided prompt received', { promptLength: prompt.length });
 
     // Validate prompt for security
+    logger.info('Validating prompt for security...');
     this.validatePrompt(prompt);
+    logger.info('Prompt validation passed');
 
     try {
       // Determine and sanitize working directory
+      logger.info('Determining working directory...');
       let workingDir = process.cwd();
       if (job.project?.system_path) {
+        logger.info('Project path provided, validating...', { path: job.project.system_path });
         const sanitizedPath = this.validateAndSanitizePath(job.project.system_path);
         if (sanitizedPath && fs.existsSync(sanitizedPath)) {
           workingDir = sanitizedPath;
+          logger.info('Using project directory', { workingDir });
         } else {
           logger.warn(`Invalid or missing project path, using current directory: ${process.cwd()}`);
         }
+      } else {
+        logger.info('No project path provided, using current directory', { workingDir });
       }
 
       // Setup log file for streaming PRD generation output
+      logger.info('Setting up log file...');
       const logDir = path.join(workingDir, '.ralph-logs');
       await fsPromises.mkdir(logDir, { recursive: true });
       const logFile = path.join(logDir, `job-${job.id}.log`);
@@ -158,13 +167,26 @@ Started: ${new Date(startTime).toISOString()}
       await fsPromises.writeFile(logFile, logHeader);
       logger.info(`PRD generation log created at: ${logFile}`);
 
+      // Send status event to UI
+      if (this.apiClient) {
+        await this.apiClient.sendStatusEvent(job.id, 'prd_generation_started', 'Starting PRD generation with Claude...');
+      }
+
       // Create a wrapper onProgress that also writes to log file
+      let totalChunks = 0;
       const logAndProgress = async (chunk) => {
+        totalChunks++;
+
         // Append chunk to log file
         try {
           await fsPromises.appendFile(logFile, chunk);
         } catch (err) {
           logger.warn(`Failed to append to log file: ${err.message}`);
+        }
+
+        // Log progress periodically (every 50 chunks to avoid spam)
+        if (totalChunks % 50 === 0) {
+          logger.debug(`PRD generation progress: ${totalChunks} chunks received`);
         }
 
         // Call original progress callback if provided
@@ -174,9 +196,16 @@ Started: ${new Date(startTime).toISOString()}
       };
 
       // Use Claude Code with server-provided template (no longer using /prd skill)
+      logger.info('Invoking Claude Code for PRD generation...');
+      logger.info('This may take several minutes depending on complexity');
       const output = await this.runClaude(prompt, workingDir, logAndProgress);
+      logger.info('Claude Code execution completed', {
+        outputLength: output.length,
+        totalChunks
+      });
 
       // Write completion footer to log
+      logger.info('Writing completion footer to log file...');
       const logFooter = `
 ═══════════════════════════════════════════════════════════
 PRD Generation completed at: ${new Date().toISOString()}
@@ -185,7 +214,16 @@ PRD Generation completed at: ${new Date().toISOString()}
       await fsPromises.appendFile(logFile, logFooter);
       logger.info(`PRD generation log completed: ${logFile}`);
 
+      // Send completion status event
+      if (this.apiClient) {
+        await this.apiClient.sendStatusEvent(job.id, 'prd_generation_complete', 'PRD generation completed successfully');
+      }
+
       const executionTimeMs = Date.now() - startTime;
+      logger.info('PRD generation successful', {
+        executionTimeMs,
+        executionTimeFormatted: this.formatDuration(executionTimeMs)
+      });
 
       return {
         output: output,
@@ -193,9 +231,38 @@ PRD Generation completed at: ${new Date().toISOString()}
         executionTimeMs: executionTimeMs
       };
     } catch (error) {
-      logger.error(`PRD generation failed for job #${job.id}:`, error.message);
+      logger.error(`PRD generation failed for job #${job.id}: ${error.message}`);
+      logger.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        category: error.category,
+        stack: error.stack?.split('\n').slice(0, 5).join('\n') // First 5 lines of stack
+      });
+
+      // Send failure status event
+      if (this.apiClient) {
+        await this.apiClient.sendStatusEvent(
+          job.id,
+          'prd_generation_failed',
+          `PRD generation failed: ${error.message}`
+        );
+      }
+
       throw error;
     }
+  }
+
+  /**
+   * Format duration in human-readable form
+   * @param {number} ms - Duration in milliseconds
+   * @returns {string} Formatted duration
+   */
+  formatDuration(ms) {
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${minutes}m ${seconds}s`;
   }
 
   /**
@@ -269,7 +336,7 @@ Plan Generation completed at: ${new Date().toISOString()}
         executionTimeMs: executionTimeMs
       };
     } catch (error) {
-      logger.error(`Plan generation failed for job #${job.id}:`, error.message);
+      logger.error(`Plan generation failed for job #${job.id}: ${error.message}`);
       throw error;
     }
   }
@@ -469,7 +536,7 @@ Execution completed at: ${new Date().toISOString()}
         }
       };
     } catch (error) {
-      logger.error(`Code implementation failed for job #${job.id}`, error.message);
+      logger.error(`Code implementation failed for job #${job.id}: ${error.message}`);
 
       // Save error details to log file
       const logDir = path.join(job.project.system_path, '.ralph-logs');
@@ -728,19 +795,27 @@ ${this.capturedStderr || 'No stderr captured'}
    */
   runClaude(prompt, cwd, onProgress, timeout = 7200000) {
     return new Promise((resolve, reject) => {
-      logger.debug(`Starting Claude CLI execution with timeout: ${timeout}ms`);
+      const timeoutFormatted = this.formatDuration(timeout);
+      logger.info(`Starting Claude CLI execution`, {
+        timeout: timeoutFormatted,
+        workingDirectory: cwd,
+        promptLength: prompt.length
+      });
 
       // Use stdin to pass prompt - avoids shell injection
       // Add --debug flag to get more detailed error information
+      logger.info('Spawning Claude CLI process with --permission-mode acceptEdits --debug');
       const claude = spawn('claude', ['--permission-mode', 'acceptEdits', '--debug'], {
         cwd: cwd,
         shell: false,  // FIXED: Don't use shell
         env: this.getSanitizedEnv()
       });
 
+      logger.info('Claude CLI process spawned, writing prompt to stdin...');
+
       // Set timeout
       const timer = setTimeout(() => {
-        logger.error(`Claude CLI timed out after ${timeout}ms`);
+        logger.error(`Claude CLI timed out after ${timeout}ms (${timeoutFormatted})`);
         claude.kill('SIGTERM');
         reject(new Error(`Claude CLI execution timed out after ${timeout}ms`));
       }, timeout);
@@ -749,15 +824,35 @@ ${this.capturedStderr || 'No stderr captured'}
       this.currentProcess = claude;
 
       // Send prompt via stdin (safe from injection)
-      claude.stdin.write(prompt);
-      claude.stdin.end();
+      try {
+        claude.stdin.write(prompt);
+        claude.stdin.end();
+        logger.info('Prompt successfully written to Claude CLI stdin');
+      } catch (err) {
+        logger.error('Failed to write prompt to Claude CLI stdin', { error: err.message });
+        clearTimeout(timer);
+        reject(new Error(`Failed to write prompt to Claude: ${err.message}`));
+        return;
+      }
 
       let stdout = '';
       let stderr = '';
+      let lastLogTime = Date.now();
+      const LOG_INTERVAL = 10000; // Log progress every 10 seconds
 
       claude.stdout.on('data', (data) => {
         const chunk = data.toString();
         stdout += chunk;
+
+        // Log progress periodically
+        const now = Date.now();
+        if (now - lastLogTime > LOG_INTERVAL) {
+          logger.info('Claude still generating output...', {
+            outputLength: stdout.length,
+            elapsedTime: this.formatDuration(now - (Date.now() - timeout + timeout))
+          });
+          lastLogTime = now;
+        }
 
         // Detect and emit events from stdout
         this.detectAndEmitEvents(chunk);
@@ -771,7 +866,9 @@ ${this.capturedStderr || 'No stderr captured'}
       claude.stderr.on('data', (data) => {
         const stderrChunk = data.toString();
         stderr += stderrChunk;
-        logger.debug('Claude stderr:', stderrChunk);
+
+        // Log stderr in smaller chunks for debugging
+        logger.debug('Claude stderr chunk:', stderrChunk.substring(0, 500));
 
         // Detect and emit events from stderr (Claude outputs a lot to stderr)
         this.detectAndEmitEvents(stderrChunk);
@@ -785,13 +882,27 @@ ${this.capturedStderr || 'No stderr captured'}
       claude.on('close', (code) => {
         clearTimeout(timer); // Clear timeout
         this.currentProcess = null; // Clear process reference
+
+        logger.info(`Claude CLI process exited`, {
+          exitCode: code,
+          stdoutLength: stdout.length,
+          stderrLength: stderr.length
+        });
+
         if (code === 0) {
-          logger.debug('Claude CLI execution completed successfully');
+          logger.info('Claude CLI execution completed successfully');
           resolve(stdout);
         } else {
-          logger.error(`Claude CLI exited with code ${code}`);
+          logger.error(`Claude CLI exited with non-zero code ${code}`);
+          logger.error('Last 1000 chars of stderr:', stderr.slice(-1000));
+
           const baseError = new Error(`Claude CLI failed with exit code ${code}: ${stderr}`);
           const errorInfo = this.categorizeError(baseError, stderr, code);
+
+          logger.error('Error categorization:', {
+            category: errorInfo.category,
+            userMessage: errorInfo.userMessage
+          });
 
           // Attach categorization to error object
           const enrichedError = new Error(errorInfo.userMessage);
@@ -806,9 +917,19 @@ ${this.capturedStderr || 'No stderr captured'}
       claude.on('error', (error) => {
         clearTimeout(timer); // Clear timeout
         this.currentProcess = null; // Clear process reference
-        logger.error('Failed to spawn Claude CLI', error.message);
+        logger.error('Failed to spawn Claude CLI process', {
+          error: error.message,
+          code: error.code,
+          errno: error.errno,
+          syscall: error.syscall
+        });
 
         const errorInfo = this.categorizeError(error, stderr, null);
+
+        logger.error('Spawn error categorization:', {
+          category: errorInfo.category,
+          userMessage: errorInfo.userMessage
+        });
 
         // Attach categorization to error object
         const enrichedError = new Error(errorInfo.userMessage);
