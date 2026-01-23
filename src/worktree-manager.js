@@ -8,7 +8,7 @@ const logger = require('./logger');
  *
  * Each job gets an isolated worktree as a sibling to the repo:
  * <repo-parent>/<repo-name>-worktrees/job-{id}/
- * with a unique branch: ralph/ticket-{task_id}/job-{job_id}
+ * with a unique branch: blaster/ticket-{task_id}/job-{job_id}
  *
  * Worktrees are created OUTSIDE the repo to prevent git conflicts.
  */
@@ -169,10 +169,10 @@ class WorktreeManager {
   /**
    * Get the branch name for this job
    * @param {Object} job - The job object
-   * @returns {string} - Branch name in format ralph/ticket-{task_id}/job-{job_id}
+   * @returns {string} - Branch name in format blaster/ticket-{task_id}/job-{job_id}
    */
   getBranchName(job) {
-    return `ralph/ticket-${job.task_id}/job-${job.id}`
+    return `blaster/ticket-${job.task_id}/job-${job.id}`
   }
 
   /**
