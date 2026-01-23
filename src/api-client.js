@@ -75,6 +75,12 @@ class ApiClient {
 
         logger.info(`Claimed job #${job.id} - ${job.task_title}`);
 
+        // EXTRA LOUD logging for PRD generation jobs to debug visibility issue
+        if (job.job_type === 'prd_generation') {
+          logger.info(`🔴🔴🔴 PRD GENERATION JOB CLAIMED #${job.id} 🔴🔴🔴`);
+          logger.info(`PRD Job Details: ${JSON.stringify({id: job.id, title: job.task_title, mode: job.prd_mode})}`);
+        }
+
         // Log full job details for debugging (especially useful in multi-agent scenarios)
         logger.debug('Job details:', {
           id: job.id,

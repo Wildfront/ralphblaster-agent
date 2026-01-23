@@ -34,6 +34,11 @@ class Executor {
 
     logger.info(`Executing ${jobDescription} job #${job.id}`);
 
+    // EXTRA LOUD logging for PRD generation jobs
+    if (job.job_type === 'prd_generation') {
+      logger.info(`🟢🟢🟢 STARTING PRD GENERATION EXECUTION #${job.id} 🟢🟢🟢`);
+    }
+
     // Route to appropriate handler based on job type
     if (job.job_type === 'prd_generation') {
       return await this.executePrdGeneration(job, onProgress, startTime);
