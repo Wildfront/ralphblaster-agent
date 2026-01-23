@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { spawn } = require('child_process');
+const logger = require('./logger');
 
 /**
  * Manages Ralph agent instances within git worktrees
@@ -55,6 +56,10 @@ Started: ${new Date().toISOString()}
     const promptFilePath = path.join(instancePath, 'input-prd.md');
     await fs.writeFile(promptFilePath, prompt);
 
+    const startTime = Date.now();
+    const promptSize = Buffer.byteLength(prompt, 'utf8');
+    logger.info(`Starting PRD to JSON conversion (input size: ${promptSize} bytes, ${prompt.split('\n').length} lines)`);
+
     try {
       // Run claude /ralph to convert the PRD using spawn (no shell execution)
       const claude = spawn('claude', ['--dangerously-skip-permissions', '/ralph'], {
@@ -72,9 +77,36 @@ Started: ${new Date().toISOString()}
 
       let stdout = '';
       let stderr = '';
+      let lastLogTime = Date.now();
 
-      claude.stdout.on('data', (data) => stdout += data.toString());
-      claude.stderr.on('data', (data) => stderr += data.toString());
+      // Real-time logging of stdout/stderr
+      claude.stdout.on('data', (data) => {
+        const chunk = data.toString();
+        stdout += chunk;
+
+        // Log progress every 30 seconds or when there's significant output
+        const now = Date.now();
+        if (now - lastLogTime > 30000 || chunk.length > 500) {
+          const elapsed = Math.round((now - startTime) / 1000);
+          logger.info(`PRD conversion in progress (${elapsed}s elapsed, ${stdout.length} bytes captured)`);
+          lastLogTime = now;
+        }
+
+        // Log actual output at debug level
+        logger.debug(`Claude stdout: ${chunk.substring(0, 200)}${chunk.length > 200 ? '...' : ''}`);
+      });
+
+      claude.stderr.on('data', (data) => {
+        const chunk = data.toString();
+        stderr += chunk;
+        logger.debug(`Claude stderr: ${chunk}`);
+      });
+
+      // Log progress every 30 seconds
+      const progressInterval = setInterval(() => {
+        const elapsed = Math.round((Date.now() - startTime) / 1000);
+        logger.info(`PRD conversion still running (${elapsed}s elapsed)... stdout: ${stdout.length} bytes, stderr: ${stderr.length} bytes`);
+      }, 30000);
 
       // Wait for process to complete with timeout
       const exitCode = await new Promise((resolve, reject) => {
@@ -83,16 +115,45 @@ Started: ${new Date().toISOString()}
 
         // 5 minute timeout for PRD conversion
         const timeout = setTimeout(() => {
+          clearInterval(progressInterval);
+          const elapsed = Math.round((Date.now() - startTime) / 1000);
+          logger.error(`PRD conversion timed out after ${elapsed}s`);
+          logger.error(`Captured stdout (${stdout.length} bytes):`, stdout);
+          logger.error(`Captured stderr (${stderr.length} bytes):`, stderr);
           claude.kill('SIGTERM');
           reject(new Error('PRD conversion timed out after 5 minutes'));
         }, 300000);
 
-        claude.on('close', () => clearTimeout(timeout));
+        claude.on('close', () => {
+          clearTimeout(timeout);
+          clearInterval(progressInterval);
+        });
       });
 
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      logger.info(`PRD conversion completed in ${elapsed}s (exit code: ${exitCode})`);
+
       if (exitCode !== 0) {
+        logger.error(`Claude /ralph failed. Stdout: ${stdout}`);
+        logger.error(`Claude /ralph failed. Stderr: ${stderr}`);
         throw new Error(`Claude /ralph failed with exit code ${exitCode}: ${stderr}`);
       }
+
+      // Save conversion output for debugging
+      const conversionLogPath = path.join(instancePath, 'prd-conversion.log');
+      await fs.writeFile(conversionLogPath, `PRD Conversion Log
+Started: ${new Date(startTime).toISOString()}
+Completed: ${new Date().toISOString()}
+Duration: ${elapsed}s
+Input size: ${promptSize} bytes
+
+=== STDOUT ===
+${stdout}
+
+=== STDERR ===
+${stderr}
+`);
+      logger.debug(`Saved conversion log to: ${conversionLogPath}`);
 
       // Verify prd.json was created
       const prdJsonPath = path.join(instancePath, 'prd.json');
@@ -106,6 +167,8 @@ Started: ${new Date().toISOString()}
         if (!prd.branchName || !prd.userStories) {
           throw new Error('Invalid prd.json structure: missing branchName or userStories');
         }
+
+        logger.info(`Successfully validated prd.json (branch: ${prd.branchName}, ${prd.userStories.length} user stories)`);
       } catch (error) {
         throw new Error(`prd.json validation failed: ${error.message}\nStdout: ${stdout}\nStderr: ${stderr}`);
       }
