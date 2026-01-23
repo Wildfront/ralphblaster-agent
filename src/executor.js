@@ -773,6 +773,9 @@ ${this.capturedStderr || 'No stderr captured'}
         const chunk = data.toString();
         stdout += chunk;
 
+        // Log Claude stdout in real-time for debugging
+        logger.info('Claude stdout:', chunk.substring(0, 1000));
+
         // Log progress periodically
         const now = Date.now();
         if (now - lastLogTime > LOG_INTERVAL) {
@@ -797,7 +800,7 @@ ${this.capturedStderr || 'No stderr captured'}
         stderr += stderrChunk;
 
         // Log stderr in smaller chunks for debugging
-        logger.debug('Claude stderr chunk:', stderrChunk.substring(0, 500));
+        logger.info('Claude stderr:', stderrChunk.substring(0, 1000));
 
         // Detect and emit events from stderr (Claude outputs a lot to stderr)
         this.detectAndEmitEvents(stderrChunk);
@@ -889,6 +892,12 @@ ${this.capturedStderr || 'No stderr captured'}
       promptLength: prompt.length
     });
 
+    // Send to API/UI
+    if (this.apiClient && this.apiClient.sendProgress) {
+      this.apiClient.sendProgress(job.id, `Running Claude Code in worktree: ${path.basename(worktreePath)}\n`)
+        .catch(err => logger.warn(`Failed to send progress to API: ${err.message}`));
+    }
+
     logger.event('claude_started', {
       component: 'executor',
       operation: 'claude_direct',
@@ -897,6 +906,13 @@ ${this.capturedStderr || 'No stderr captured'}
 
     // Spawn Claude with same flags as current implementation
     logger.info('Spawning Claude CLI process with --permission-mode acceptEdits --debug');
+
+    // Send to API/UI
+    if (this.apiClient && this.apiClient.sendProgress) {
+      this.apiClient.sendProgress(job.id, 'Spawning Claude CLI process with --permission-mode acceptEdits --debug\n')
+        .catch(err => logger.warn(`Failed to send progress to API: ${err.message}`));
+    }
+
     const claudeProcess = spawn('claude', ['--permission-mode', 'acceptEdits', '--debug'], {
       cwd: worktreePath,
       shell: false,  // Security: don't use shell
@@ -917,6 +933,12 @@ ${this.capturedStderr || 'No stderr captured'}
       claudeProcess.stdin.write(prompt);
       claudeProcess.stdin.end();
       logger.info('Prompt successfully written to Claude CLI stdin');
+
+      // Send to API/UI
+      if (this.apiClient && this.apiClient.sendProgress) {
+        this.apiClient.sendProgress(job.id, 'Prompt successfully written to Claude CLI stdin\n')
+          .catch(err => logger.warn(`Failed to send progress to API: ${err.message}`));
+      }
     } catch (err) {
       logger.error('Failed to write prompt to Claude CLI stdin', { error: err.message });
       clearTimeout(timer);
@@ -935,6 +957,9 @@ ${this.capturedStderr || 'No stderr captured'}
       claudeProcess.stdout.on('data', async (data) => {
         const chunk = data.toString();
         output += chunk;
+
+        // Log Claude stdout in real-time for debugging
+        logger.info('Claude stdout:', chunk.substring(0, 1000));
 
         // Stream progress to API in real-time (full output)
         if (this.apiClient) {
@@ -970,7 +995,7 @@ ${this.capturedStderr || 'No stderr captured'}
         errorOutput += chunk;
         // Save to instance variable for log file
         this.capturedStderr = (this.capturedStderr || '') + chunk;
-        logger.warn('Claude stderr:', chunk.substring(0, 500));
+        logger.info('Claude stderr:', chunk.substring(0, 1000));
 
         // Detect and emit events from stderr (Claude outputs a lot to stderr)
         this.detectAndEmitEvents(chunk);
@@ -1102,6 +1127,11 @@ ${this.capturedStderr || 'No stderr captured'}
         if (match) {
           const message = getMessage(match);
           const filename = match[1] ? match[1].replace(/[`'"]/g, '').trim() : null;
+
+          // Skip files with ellipsis (truncated paths)
+          if (filename && filename.includes('...')) {
+            return;
+          }
 
           logger.debug(`Detected ${type}: ${message}`);
           this.apiClient.sendStatusEvent(
