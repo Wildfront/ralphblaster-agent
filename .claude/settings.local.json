@@ -62,7 +62,9 @@
       "Bash(gh issue view:*)",
       "Bash(node -c:*)",
       "Bash(ruby -c:*)",
-      "Bash(brew list:*)"
+      "Bash(brew list:*)",
+      "Bash(node -e:*)",
+      "Bash(git stash:*)"
     ]
   }
 }
