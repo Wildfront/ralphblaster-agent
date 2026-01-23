@@ -92,7 +92,7 @@ Please generate the prd.json file now at the path specified above.`;
       logger.debug(`First 500 chars of prompt: ${fullPrompt.substring(0, 500)}...`);
 
       // Run Claude with the combined prompt
-      const claude = spawn('claude', ['--dangerously-skip-permissions'], {
+      const claude = spawn('claude', ['--print', '--dangerously-skip-permissions'], {
         cwd: instancePath,
         env: {
           ...process.env,

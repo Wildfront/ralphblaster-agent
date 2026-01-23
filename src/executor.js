@@ -638,7 +638,7 @@ ${this.capturedStderr || 'No stderr captured'}
     return new Promise((resolve, reject) => {
       logger.debug(`Running Claude skill: /${skill} with timeout: ${timeout}ms`);
 
-      const claude = spawn('claude', ['--permission-mode', 'acceptEdits', `/${skill}`], {
+      const claude = spawn('claude', ['--print', '--permission-mode', 'acceptEdits', `/${skill}`], {
         cwd: cwd,
         shell: false,  // FIXED: Don't use shell
         env: this.getSanitizedEnv()
@@ -734,7 +734,7 @@ ${this.capturedStderr || 'No stderr captured'}
       // Use stdin to pass prompt - avoids shell injection
       // Add --debug flag to get more detailed error information
       logger.info('Spawning Claude CLI process with --permission-mode acceptEdits --debug');
-      const claude = spawn('claude', ['--permission-mode', 'acceptEdits', '--debug'], {
+      const claude = spawn('claude', ['--print', '--permission-mode', 'acceptEdits', '--debug'], {
         cwd: cwd,
         shell: false,  // FIXED: Don't use shell
         env: this.getSanitizedEnv()
@@ -913,7 +913,7 @@ ${this.capturedStderr || 'No stderr captured'}
         .catch(err => logger.warn(`Failed to send progress to API: ${err.message}`));
     }
 
-    const claudeProcess = spawn('claude', ['--permission-mode', 'acceptEdits', '--debug'], {
+    const claudeProcess = spawn('claude', ['--print', '--permission-mode', 'acceptEdits', '--debug'], {
       cwd: worktreePath,
       shell: false,  // Security: don't use shell
       env: this.getSanitizedEnv()  // Use existing sanitization method

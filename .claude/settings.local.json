@@ -64,7 +64,8 @@
       "Bash(ruby -c:*)",
       "Bash(brew list:*)",
       "Bash(node -e:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(claude --print)"
     ]
   }
 }
