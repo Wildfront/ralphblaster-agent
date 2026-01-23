@@ -55,7 +55,7 @@ class ApiClient {
    */
   async getNextJob() {
     try {
-      logger.debug(`Long polling for next job (timeout: ${SERVER_LONG_POLL_TIMEOUT_S}s)...`);
+      logger.info(`Polling for next job (long poll timeout: ${SERVER_LONG_POLL_TIMEOUT_S}s)...`);
       const response = await this.client.get('/api/v1/ralph/jobs/next', {
         params: { timeout: SERVER_LONG_POLL_TIMEOUT_S }, // Server waits up to 30s for job
         timeout: LONG_POLLING_TIMEOUT_MS // Client waits up to 35s (30s + 5s buffer)
@@ -63,6 +63,7 @@ class ApiClient {
 
       if (response.status === 204) {
         // No jobs available
+        logger.info('No jobs available (HTTP 204)');
         return null;
       }
 
@@ -76,16 +77,13 @@ class ApiClient {
           return null;
         }
 
-        logger.info(`Claimed job #${job.id} - ${job.task_title}`);
+        logger.info(`✓ Claimed job #${job.id} - ${job.task_title}`);
 
-        // Log full job details for debugging (especially useful in multi-agent scenarios)
-        logger.debug('Job details:', {
+        // Log full job details (upgraded from debug to info for visibility)
+        logger.info('Job details:', {
           id: job.id,
           job_type: job.job_type,
           task_title: job.task_title,
-          created_at: job.created_at,
-          user_id: job.user_id,
-          project_id: job.project?.id,
           project_name: job.project?.name,
           has_prompt: !!job.prompt,
           prompt_length: job.prompt?.length || 0
@@ -99,6 +97,7 @@ class ApiClient {
     } catch (error) {
       if (error.response?.status === 204) {
         // No jobs available
+        logger.info('No jobs available (HTTP 204)');
         return null;
       }
 
@@ -112,7 +111,7 @@ class ApiClient {
         return null;
       }
 
-      logger.error('Error fetching next job', error.message);
+      logger.error('Error fetching next job: ' + error.message);
       return null;
     }
   }
@@ -128,7 +127,7 @@ class ApiClient {
       });
       logger.info(`Job #${jobId} marked as running`);
     } catch (error) {
-      logger.error(`Error marking job #${jobId} as running`, error.message);
+      logger.error(`Error marking job #${jobId} as running: ${error.message}`);
       throw error;
     }
   }
@@ -159,6 +158,17 @@ class ApiClient {
    */
   async markJobCompleted(jobId, result) {
     try {
+      logger.info(`Building completion payload for job #${jobId}...`, {
+        hasOutput: !!result.output,
+        outputLength: result.output?.length || 0,
+        hasPrdContent: !!result.prdContent,
+        prdContentLength: result.prdContent?.length || 0,
+        hasSummary: !!result.summary,
+        hasBranchName: !!result.branchName,
+        hasGitActivity: !!result.gitActivity,
+        executionTimeMs: result.executionTimeMs
+      });
+
       const payload = {
         status: 'completed',
         output: this.validateOutput(result.output || ''),
@@ -167,22 +177,26 @@ class ApiClient {
 
       // Add job-type specific fields with validation
       if (result.prdContent) {
+        logger.info('Adding PRD content to payload', { length: result.prdContent.length });
         payload.prd_content = this.validateOutput(result.prdContent);
       }
       if (result.summary) {
+        logger.info('Adding summary to payload', { length: result.summary.length });
         payload.summary = this.validateOutput(result.summary, 10000); // 10KB max for summary
       }
       if (result.branchName) {
         // Validate branch name format
         if (!/^[a-zA-Z0-9/_-]{1,200}$/.test(result.branchName)) {
-          logger.warn('Invalid branch name format, omitting from payload');
+          logger.warn('Invalid branch name format, omitting from payload', { branchName: result.branchName });
         } else {
+          logger.info('Adding branch name to payload', { branchName: result.branchName });
           payload.branch_name = result.branchName;
         }
       }
 
       // Add git activity metadata
       if (result.gitActivity) {
+        logger.info('Adding git activity to payload', result.gitActivity);
         payload.git_activity = {
           commit_count: result.gitActivity.commitCount || 0,
           last_commit: result.gitActivity.lastCommit || null,
@@ -192,10 +206,20 @@ class ApiClient {
         };
       }
 
+      logger.info('Sending PATCH request to mark job as completed...', {
+        endpoint: `/api/v1/ralph/jobs/${jobId}`,
+        payloadSize: JSON.stringify(payload).length
+      });
+
       await this.client.patch(`/api/v1/ralph/jobs/${jobId}`, payload);
-      logger.info(`Job #${jobId} marked as completed`);
+      logger.info(`✓ Job #${jobId} successfully marked as completed in API`);
     } catch (error) {
-      logger.error(`Error marking job #${jobId} as completed`, error.message);
+      logger.error(`✗ Failed to mark job #${jobId} as completed in API`, {
+        error: error.message,
+        statusCode: error.response?.status,
+        responseData: error.response?.data,
+        stack: error.stack?.split('\n').slice(0, 3).join('\n')
+      });
       throw error;
     }
   }
@@ -210,6 +234,14 @@ class ApiClient {
     try {
       // Support both Error objects and string messages for backward compatibility
       const errorMessage = typeof error === 'string' ? error : error.message || String(error);
+
+      logger.info('Building failure payload...', {
+        errorMessage: errorMessage,
+        errorType: typeof error,
+        hasPartialOutput: !!(partialOutput || error.partialOutput),
+        partialOutputLength: (partialOutput || error.partialOutput)?.length || 0
+      });
+
       const payload = {
         status: 'failed',
         error: errorMessage,
@@ -220,16 +252,36 @@ class ApiClient {
       if (typeof error === 'object' && error !== null) {
         if (error.category) {
           payload.error_category = error.category;
+          logger.info('Error category identified', { category: error.category });
         }
         if (error.technicalDetails) {
           payload.error_details = error.technicalDetails;
+          logger.info('Technical details available', {
+            detailsLength: error.technicalDetails.length
+          });
+        }
+        if (error.stack) {
+          logger.info('Error stack trace (first 5 lines):', {
+            stack: error.stack.split('\n').slice(0, 5).join('\n')
+          });
         }
       }
 
+      logger.info('Sending PATCH request to mark job as failed...', {
+        endpoint: `/api/v1/ralph/jobs/${jobId}`,
+        errorCategory: payload.error_category || 'unknown',
+        hasErrorDetails: !!payload.error_details
+      });
+
       await this.client.patch(`/api/v1/ralph/jobs/${jobId}`, payload);
-      logger.info(`Job #${jobId} marked as failed with category: ${payload.error_category || 'unknown'}`);
-    } catch (error) {
-      logger.error(`Error marking job #${jobId} as failed`, error.message);
+      logger.info(`✓ Job #${jobId} successfully marked as failed in API with category: ${payload.error_category || 'unknown'}`);
+    } catch (apiError) {
+      logger.error(`✗ Failed to mark job #${jobId} as failed in API (meta-failure!)`, {
+        originalError: typeof error === 'string' ? error : error.message,
+        apiError: apiError.message,
+        statusCode: apiError.response?.status,
+        responseData: apiError.response?.data
+      });
       // Don't throw - we want to continue even if this fails
     }
   }
@@ -246,7 +298,7 @@ class ApiClient {
       });
       logger.debug(`Heartbeat sent for job #${jobId}`);
     } catch (error) {
-      logger.warn(`Error sending heartbeat for job #${jobId}`, error.message);
+      logger.warn(`Error sending heartbeat for job #${jobId}: ${error.message}`);
     }
   }
 
@@ -262,7 +314,7 @@ class ApiClient {
       });
       logger.debug(`Progress sent for job #${jobId}`);
     } catch (error) {
-      logger.warn(`Error sending progress for job #${jobId}`, error.message);
+      logger.warn(`Error sending progress for job #${jobId}: ${error.message}`);
     }
   }
 
@@ -282,7 +334,7 @@ class ApiClient {
       });
       logger.debug(`Status event sent for job #${jobId}: ${eventType} - ${message}`);
     } catch (error) {
-      logger.warn(`Error sending status event for job #${jobId}`, error.message);
+      logger.warn(`Error sending status event for job #${jobId}: ${error.message}`);
       // Don't throw - status events are best-effort for UI visibility
     }
   }
@@ -299,7 +351,7 @@ class ApiClient {
       });
       logger.debug(`Metadata updated for job #${jobId}`, metadata);
     } catch (error) {
-      logger.warn(`Error updating metadata for job #${jobId}`, error.message);
+      logger.warn(`Error updating metadata for job #${jobId}: ${error.message}`);
       // Don't throw - metadata updates are best-effort
     }
   }
@@ -328,7 +380,7 @@ class ApiClient {
       await this.client.patch(`/api/v1/ralph/jobs/${jobId}/setup_log`, payload);
       logger.debug(`Setup log sent for job #${jobId}: [${level}] ${message}`);
     } catch (error) {
-      logger.debug(`Error sending setup log for job #${jobId}`, error.message);
+      logger.debug(`Error sending setup log for job #${jobId}: ${error.message}`);
       // Don't throw - setup logs are best-effort for UI visibility
       // Silently fail to avoid disrupting job execution
     }
@@ -349,7 +401,7 @@ class ApiClient {
       });
       logger.debug(`Batch setup logs sent for job #${jobId}: ${logs.length} logs`);
     } catch (error) {
-      logger.debug(`Error sending batch setup logs for job #${jobId}`, error.message);
+      logger.debug(`Error sending batch setup logs for job #${jobId}: ${error.message}`);
       // Don't throw - setup logs are best-effort for UI visibility
       // Silently fail to avoid disrupting job execution
       throw error; // Rethrow so batcher can fall back to individual sends
