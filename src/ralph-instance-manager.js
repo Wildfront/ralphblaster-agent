@@ -46,23 +46,53 @@ Started: ${new Date().toISOString()}
   }
 
   /**
-   * Converts markdown PRD to prd.json using Claude /ralph skill
+   * Converts markdown PRD to prd.json using bundled Ralph skill
    * @param {string} instancePath - Path to the Ralph instance directory
    * @param {string} prompt - The PRD markdown content
    * @returns {Promise<void>}
    */
   async convertPrdToJson(instancePath, prompt) {
-    // Write the prompt to a temporary file
-    const promptFilePath = path.join(instancePath, 'input-prd.md');
-    await fs.writeFile(promptFilePath, prompt);
-
     const startTime = Date.now();
     const promptSize = Buffer.byteLength(prompt, 'utf8');
     logger.info(`Starting PRD to JSON conversion (input size: ${promptSize} bytes, ${prompt.split('\n').length} lines)`);
+    logger.info(`Instance path: ${instancePath}`);
+    logger.info(`Expected output file: ${path.join(instancePath, 'prd.json')}`);
 
     try {
-      // Run claude /ralph to convert the PRD using spawn (no shell execution)
-      const claude = spawn('claude', ['--dangerously-skip-permissions', '/ralph'], {
+      // Log directory contents before conversion
+      logger.debug('Directory contents BEFORE conversion:');
+      const beforeFiles = await fs.readdir(instancePath);
+      logger.debug(`  Files: ${beforeFiles.join(', ') || '(empty)'}`);
+
+      // Load the bundled Ralph skill instructions
+      const skillPath = path.join(__dirname, 'claude-plugin', 'skills', 'ralph', 'SKILL.md');
+      const skillContent = await fs.readFile(skillPath, 'utf8');
+
+      // Remove the YAML frontmatter from skill content
+      const skillInstructions = skillContent.replace(/^---\n[\s\S]*?\n---\n/, '');
+
+      // Create the full prompt with skill instructions + PRD content
+      const fullPrompt = `${skillInstructions}
+
+---
+
+You are converting the following PRD to prd.json format. Follow the instructions above carefully.
+
+IMPORTANT: Write the prd.json file to this exact path:
+${path.join(instancePath, 'prd.json')}
+
+Here is the PRD to convert:
+
+${prompt}
+
+Please generate the prd.json file now at the path specified above.`;
+
+      // Log the prompt being sent (truncated for brevity)
+      logger.debug(`Prompt size: ${fullPrompt.length} bytes`);
+      logger.debug(`First 500 chars of prompt: ${fullPrompt.substring(0, 500)}...`);
+
+      // Run Claude with the combined prompt
+      const claude = spawn('claude', ['--dangerously-skip-permissions'], {
         cwd: instancePath,
         env: {
           ...process.env,
@@ -71,9 +101,12 @@ Started: ${new Date().toISOString()}
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
-      // Pipe the file content to stdin
-      const fileStream = require('fs').createReadStream(promptFilePath);
-      fileStream.pipe(claude.stdin);
+      logger.debug(`Spawned Claude process with PID: ${claude.pid}`);
+      logger.debug(`Working directory: ${instancePath}`);
+
+      // Send the full prompt to stdin
+      claude.stdin.write(fullPrompt);
+      claude.stdin.end();
 
       let stdout = '';
       let stderr = '';
@@ -133,11 +166,28 @@ Started: ${new Date().toISOString()}
       const elapsed = Math.round((Date.now() - startTime) / 1000);
       logger.info(`PRD conversion completed in ${elapsed}s (exit code: ${exitCode})`);
 
+      // Log directory contents after conversion
+      logger.debug('Directory contents AFTER conversion:');
+      const afterFiles = await fs.readdir(instancePath);
+      logger.debug(`  Files: ${afterFiles.join(', ') || '(empty)'}`);
+
       if (exitCode !== 0) {
         logger.error(`Claude /ralph failed. Stdout: ${stdout}`);
         logger.error(`Claude /ralph failed. Stderr: ${stderr}`);
         throw new Error(`Claude /ralph failed with exit code ${exitCode}: ${stderr}`);
       }
+
+      // Analyze stdout for Write tool usage
+      logger.debug('Analyzing Claude output for Write tool calls...');
+      const writeToolMatches = stdout.match(/Write.*?prd\.json/gi) || [];
+      logger.debug(`Found ${writeToolMatches.length} potential Write tool references`);
+      if (writeToolMatches.length > 0) {
+        logger.debug(`Write tool matches: ${writeToolMatches.slice(0, 3).join(', ')}`);
+      }
+
+      // Check if stdout contains the actual JSON content
+      const hasJsonContent = stdout.includes('"branchName"') && stdout.includes('"userStories"');
+      logger.debug(`Stdout contains JSON structure: ${hasJsonContent}`);
 
       // Save conversion output for debugging
       const conversionLogPath = path.join(instancePath, 'prd-conversion.log');
@@ -146,22 +196,33 @@ Started: ${new Date(startTime).toISOString()}
 Completed: ${new Date().toISOString()}
 Duration: ${elapsed}s
 Input size: ${promptSize} bytes
+Exit code: ${exitCode}
+Working directory: ${instancePath}
+Expected output: ${path.join(instancePath, 'prd.json')}
 
-=== STDOUT ===
+=== ANALYSIS ===
+Write tool references found: ${writeToolMatches.length}
+JSON content in stdout: ${hasJsonContent}
+Files in directory after: ${afterFiles.join(', ')}
+
+=== STDOUT (${stdout.length} bytes) ===
 ${stdout}
 
-=== STDERR ===
+=== STDERR (${stderr.length} bytes) ===
 ${stderr}
 `);
-      logger.debug(`Saved conversion log to: ${conversionLogPath}`);
+      logger.debug(`Saved detailed conversion log to: ${conversionLogPath}`);
 
       // Verify prd.json was created
       const prdJsonPath = path.join(instancePath, 'prd.json');
       try {
         await fs.access(prdJsonPath);
+        logger.info(`✓ prd.json file exists at: ${prdJsonPath}`);
 
         // Validate prd.json structure
         const prdContent = await fs.readFile(prdJsonPath, 'utf8');
+        logger.debug(`prd.json file size: ${prdContent.length} bytes`);
+
         const prd = JSON.parse(prdContent);
 
         if (!prd.branchName || !prd.userStories) {
@@ -170,11 +231,26 @@ ${stderr}
 
         logger.info(`Successfully validated prd.json (branch: ${prd.branchName}, ${prd.userStories.length} user stories)`);
       } catch (error) {
-        throw new Error(`prd.json validation failed: ${error.message}\nStdout: ${stdout}\nStderr: ${stderr}`);
-      }
+        // Enhanced error with directory search
+        logger.error(`✗ prd.json validation failed: ${error.message}`);
+        logger.error(`Expected location: ${prdJsonPath}`);
 
-      // Clean up temporary prompt file
-      await fs.unlink(promptFilePath).catch(() => {});
+        // Search for prd.json anywhere in the instance directory tree
+        logger.error('Searching for prd.json in directory tree...');
+        try {
+          const { execSync } = require('child_process');
+          const findResult = execSync(`find "${instancePath}" -name "prd.json" -type f 2>/dev/null || true`).toString().trim();
+          if (findResult) {
+            logger.error(`Found prd.json at unexpected location(s):\n${findResult}`);
+          } else {
+            logger.error('No prd.json file found anywhere in directory tree');
+          }
+        } catch (findError) {
+          logger.error(`Could not search directory: ${findError.message}`);
+        }
+
+        throw new Error(`prd.json validation failed: ${error.message}\n\nExpected: ${prdJsonPath}\nFiles present: ${afterFiles.join(', ')}\n\nStdout (first 1000 chars):\n${stdout.substring(0, 1000)}\n\nStderr:\n${stderr}`);
+      }
     } catch (error) {
       throw new Error(`Failed to convert PRD to JSON: ${error.message}`);
     }

@@ -114,19 +114,25 @@ describe('RalphInstanceManager', () => {
   });
 
   describe('convertPrdToJson()', () => {
-    test('successfully converts PRD using claude /ralph', async () => {
+    test('successfully converts PRD using bundled skill', async () => {
       const instancePath = '/test/instance';
       const prompt = '# Feature PRD\n\nImplement user authentication';
+      const mockSkillContent = '---\nname: ralph\n---\n\n# Ralph Skill\n\nConvert PRD to JSON.';
 
-      fs.writeFile.mockResolvedValue();
+      // Mock skill file read
+      fs.readFile.mockImplementation((filePath) => {
+        if (filePath.includes('SKILL.md')) {
+          return Promise.resolve(mockSkillContent);
+        }
+        // Second readFile call for prd.json validation
+        return Promise.resolve(JSON.stringify({
+          branchName: 'ralph/auth-feature',
+          userStories: [
+            { id: 1, title: 'Login form', priority: 1 }
+          ]
+        }));
+      });
       fs.access.mockResolvedValue();
-      fs.readFile.mockResolvedValue(JSON.stringify({
-        branchName: 'ralph/auth-feature',
-        userStories: [
-          { id: 1, title: 'Login form', priority: 1 }
-        ]
-      }));
-      fs.unlink.mockResolvedValue();
 
       const conversionPromise = manager.convertPrdToJson(instancePath, prompt);
 
@@ -137,16 +143,16 @@ describe('RalphInstanceManager', () => {
 
       await expect(conversionPromise).resolves.not.toThrow();
 
-      // Verify temporary prompt file was written
-      expect(fs.writeFile).toHaveBeenCalledWith(
-        path.join(instancePath, 'input-prd.md'),
-        prompt
+      // Verify skill file was read
+      expect(fs.readFile).toHaveBeenCalledWith(
+        expect.stringContaining('SKILL.md'),
+        'utf8'
       );
 
-      // Verify spawn was called with correct arguments (no shell)
+      // Verify spawn was called with correct arguments (no /ralph skill)
       expect(mockSpawn).toHaveBeenCalledWith(
         'claude',
-        ['--dangerously-skip-permissions', '/ralph'],
+        ['--dangerously-skip-permissions'],
         expect.objectContaining({
           cwd: instancePath,
           stdio: ['pipe', 'pipe', 'pipe']
@@ -161,24 +167,23 @@ describe('RalphInstanceManager', () => {
         path.join(instancePath, 'prd.json'),
         'utf8'
       );
-
-      // Verify cleanup of temporary file
-      expect(fs.unlink).toHaveBeenCalledWith(
-        path.join(instancePath, 'input-prd.md')
-      );
     });
 
     test('prevents shell injection via path - no shell metacharacters executed', async () => {
       const maliciousPath = '/test/instance"; rm -rf / #';
       const prompt = '# Test PRD';
+      const mockSkillContent = '---\nname: ralph\n---\n\n# Ralph Skill';
 
-      fs.writeFile.mockResolvedValue();
+      fs.readFile.mockImplementation((filePath) => {
+        if (filePath.includes('SKILL.md')) {
+          return Promise.resolve(mockSkillContent);
+        }
+        return Promise.resolve(JSON.stringify({
+          branchName: 'ralph/test',
+          userStories: [{ id: 1, title: 'Test' }]
+        }));
+      });
       fs.access.mockResolvedValue();
-      fs.readFile.mockResolvedValue(JSON.stringify({
-        branchName: 'ralph/test',
-        userStories: [{ id: 1, title: 'Test' }]
-      }));
-      fs.unlink.mockResolvedValue();
 
       const conversionPromise = manager.convertPrdToJson(maliciousPath, prompt);
 
@@ -191,7 +196,7 @@ describe('RalphInstanceManager', () => {
       // Verify spawn was called with arguments array (not shell string)
       expect(mockSpawn).toHaveBeenCalledWith(
         'claude',
-        ['--dangerously-skip-permissions', '/ralph'],
+        ['--dangerously-skip-permissions'],
         expect.objectContaining({
           stdio: ['pipe', 'pipe', 'pipe']
         })
@@ -211,14 +216,18 @@ describe('RalphInstanceManager', () => {
         '/test/path;with;semicolons',
         '/test/path|with|pipes'
       ];
+      const mockSkillContent = '---\nname: ralph\n---\n\n# Ralph Skill';
 
-      fs.writeFile.mockResolvedValue();
+      fs.readFile.mockImplementation((filePath) => {
+        if (filePath.includes('SKILL.md')) {
+          return Promise.resolve(mockSkillContent);
+        }
+        return Promise.resolve(JSON.stringify({
+          branchName: 'ralph/test',
+          userStories: [{ id: 1 }]
+        }));
+      });
       fs.access.mockResolvedValue();
-      fs.readFile.mockResolvedValue(JSON.stringify({
-        branchName: 'ralph/test',
-        userStories: [{ id: 1 }]
-      }));
-      fs.unlink.mockResolvedValue();
 
       for (const testPath of pathsWithSpecialChars) {
         jest.clearAllMocks();
@@ -244,13 +253,17 @@ describe('RalphInstanceManager', () => {
     test('throws error if prd.json is missing branchName', async () => {
       const instancePath = '/test/instance';
       const prompt = 'Test prompt';
+      const mockSkillContent = '---\nname: ralph\n---\n\n# Ralph Skill';
 
-      fs.writeFile.mockResolvedValue();
+      fs.readFile.mockImplementation((filePath) => {
+        if (filePath.includes('SKILL.md')) {
+          return Promise.resolve(mockSkillContent);
+        }
+        return Promise.resolve(JSON.stringify({
+          userStories: [] // Missing branchName
+        }));
+      });
       fs.access.mockResolvedValue();
-      fs.readFile.mockResolvedValue(JSON.stringify({
-        userStories: [] // Missing branchName
-      }));
-      fs.unlink.mockResolvedValue();
 
       const conversionPromise = manager.convertPrdToJson(instancePath, prompt);
 
@@ -264,13 +277,17 @@ describe('RalphInstanceManager', () => {
     test('throws error if prd.json is missing userStories', async () => {
       const instancePath = '/test/instance';
       const prompt = 'Test prompt';
+      const mockSkillContent = '---\nname: ralph\n---\n\n# Ralph Skill';
 
-      fs.writeFile.mockResolvedValue();
+      fs.readFile.mockImplementation((filePath) => {
+        if (filePath.includes('SKILL.md')) {
+          return Promise.resolve(mockSkillContent);
+        }
+        return Promise.resolve(JSON.stringify({
+          branchName: 'ralph/test' // Missing userStories
+        }));
+      });
       fs.access.mockResolvedValue();
-      fs.readFile.mockResolvedValue(JSON.stringify({
-        branchName: 'ralph/test' // Missing userStories
-      }));
-      fs.unlink.mockResolvedValue();
 
       const conversionPromise = manager.convertPrdToJson(instancePath, prompt);
 
@@ -281,12 +298,17 @@ describe('RalphInstanceManager', () => {
       await expect(conversionPromise).rejects.toThrow('Invalid prd.json structure');
     });
 
-    test('throws error if claude /ralph command fails', async () => {
+    test('throws error if claude command fails', async () => {
       const instancePath = '/test/instance';
       const prompt = 'Test prompt';
+      const mockSkillContent = '---\nname: ralph\n---\n\n# Ralph Skill';
 
-      fs.writeFile.mockResolvedValue();
-      fs.unlink.mockResolvedValue();
+      fs.readFile.mockImplementation((filePath) => {
+        if (filePath.includes('SKILL.md')) {
+          return Promise.resolve(mockSkillContent);
+        }
+        return Promise.reject(new Error('File not found'));
+      });
 
       const conversionPromise = manager.convertPrdToJson(instancePath, prompt);
 

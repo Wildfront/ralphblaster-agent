@@ -189,11 +189,12 @@ for i in $(seq 1 $MAX_ITERATIONS); do
 
   # Run claude with the ralph prompt from the instance directory
   # Use --continue for iterations after the first to maintain context
-  # Use stdbuf to unbuffer output for real-time visibility
+  # Run Claude (stdbuf removed - not available on macOS)
+  # Use --debug to get detailed error information
   if [ "$i" -eq 1 ]; then
-    OUTPUT=$(cd "$SCRIPT_DIR" && cat prompt.md | stdbuf -oL -eL claude --dangerously-skip-permissions 2>&1 | tee /dev/stderr) || true
+    OUTPUT=$(cd "$SCRIPT_DIR" && cat prompt.md | claude --dangerously-skip-permissions --debug 2>&1 | tee /dev/stderr) || true
   else
-    OUTPUT=$(cd "$SCRIPT_DIR" && cat prompt.md | stdbuf -oL -eL claude --dangerously-skip-permissions --continue 2>&1 | tee /dev/stderr) || true
+    OUTPUT=$(cd "$SCRIPT_DIR" && claude --dangerously-skip-permissions --continue --debug 2>&1 | tee /dev/stderr) || true
   fi
 
   # Stop tailing progress file

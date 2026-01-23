@@ -143,8 +143,47 @@ class Executor {
         }
       }
 
+      // Setup log file for streaming PRD generation output
+      const logDir = path.join(workingDir, '.ralph-logs');
+      await fsPromises.mkdir(logDir, { recursive: true });
+      const logFile = path.join(logDir, `job-${job.id}.log`);
+
+      // Write initial log header
+      const logHeader = `═══════════════════════════════════════════════════════════
+PRD Generation Job #${job.id} - ${job.task_title}
+Started: ${new Date(startTime).toISOString()}
+═══════════════════════════════════════════════════════════
+
+`;
+      await fsPromises.writeFile(logFile, logHeader);
+      logger.info(`PRD generation log created at: ${logFile}`);
+
+      // Create a wrapper onProgress that also writes to log file
+      const logAndProgress = async (chunk) => {
+        // Append chunk to log file
+        try {
+          await fsPromises.appendFile(logFile, chunk);
+        } catch (err) {
+          logger.warn(`Failed to append to log file: ${err.message}`);
+        }
+
+        // Call original progress callback if provided
+        if (onProgress) {
+          onProgress(chunk);
+        }
+      };
+
       // Use Claude Code with server-provided template (no longer using /prd skill)
-      const output = await this.runClaude(prompt, workingDir, onProgress);
+      const output = await this.runClaude(prompt, workingDir, logAndProgress);
+
+      // Write completion footer to log
+      const logFooter = `
+═══════════════════════════════════════════════════════════
+PRD Generation completed at: ${new Date().toISOString()}
+═══════════════════════════════════════════════════════════
+`;
+      await fsPromises.appendFile(logFile, logFooter);
+      logger.info(`PRD generation log completed: ${logFile}`);
 
       const executionTimeMs = Date.now() - startTime;
 
@@ -171,8 +210,56 @@ class Executor {
     const prompt = job.prompt;
 
     try {
+      // Determine working directory
+      let workingDir = process.cwd();
+      if (job.project?.system_path) {
+        const sanitizedPath = this.validateAndSanitizePath(job.project.system_path);
+        if (sanitizedPath && fs.existsSync(sanitizedPath)) {
+          workingDir = sanitizedPath;
+        }
+      }
+
+      // Setup log file for streaming plan generation output
+      const logDir = path.join(workingDir, '.ralph-logs');
+      await fsPromises.mkdir(logDir, { recursive: true });
+      const logFile = path.join(logDir, `job-${job.id}.log`);
+
+      // Write initial log header
+      const logHeader = `═══════════════════════════════════════════════════════════
+Plan Generation Job #${job.id} - ${job.task_title}
+Started: ${new Date(startTime).toISOString()}
+═══════════════════════════════════════════════════════════
+
+`;
+      await fsPromises.writeFile(logFile, logHeader);
+      logger.info(`Plan generation log created at: ${logFile}`);
+
+      // Create a wrapper onProgress that also writes to log file
+      const logAndProgress = async (chunk) => {
+        // Append chunk to log file
+        try {
+          await fsPromises.appendFile(logFile, chunk);
+        } catch (err) {
+          logger.warn(`Failed to append to log file: ${err.message}`);
+        }
+
+        // Call original progress callback if provided
+        if (onProgress) {
+          onProgress(chunk);
+        }
+      };
+
       // Use Claude Code to trigger planning mode
-      const output = await this.runClaude(prompt, job.project?.system_path || process.cwd(), onProgress);
+      const output = await this.runClaude(prompt, workingDir, logAndProgress);
+
+      // Write completion footer to log
+      const logFooter = `
+═══════════════════════════════════════════════════════════
+Plan Generation completed at: ${new Date().toISOString()}
+═══════════════════════════════════════════════════════════
+`;
+      await fsPromises.appendFile(logFile, logFooter);
+      logger.info(`Plan generation log completed: ${logFile}`);
 
       const executionTimeMs = Date.now() - startTime;
 
@@ -196,6 +283,9 @@ class Executor {
    */
   async executeCodeImplementation(job, onProgress, startTime) {
     logger.info(`Implementing code in ${job.project.system_path}`);
+
+    // Reset captured stderr for this job
+    this.capturedStderr = '';
 
     // Validate and sanitize project path
     const sanitizedPath = this.validateAndSanitizePath(job.project.system_path);
@@ -285,6 +375,14 @@ Execution completed at: ${new Date().toISOString()}
         await fsPromises.writeFile(logFile, logContent);
         logger.info(`Execution log saved to: ${logFile}`);
 
+        // Save stderr to separate error log if it exists
+        const stderrContent = this.capturedStderr || '';
+        if (stderrContent.trim()) {
+          const errorLogFile = path.join(logDir, `job-${job.id}-stderr.log`);
+          await fsPromises.writeFile(errorLogFile, stderrContent);
+          logger.info(`Error output saved to: ${errorLogFile}`);
+        }
+
         // Also copy progress.txt, prd.json, and prd-conversion.log to logs
         try {
           const progressFile = path.join(instancePath, 'progress.txt');
@@ -372,6 +470,39 @@ Execution completed at: ${new Date().toISOString()}
       };
     } catch (error) {
       logger.error(`Code implementation failed for job #${job.id}`, error.message);
+
+      // Save error details to log file
+      const logDir = path.join(job.project.system_path, '.ralph-logs');
+      try {
+        await fsPromises.mkdir(logDir, { recursive: true });
+        const errorLogFile = path.join(logDir, `job-${job.id}-error.log`);
+        const errorContent = `
+═══════════════════════════════════════════════════════════
+Job #${job.id} - FAILED
+Error Time: ${new Date().toISOString()}
+═══════════════════════════════════════════════════════════
+
+Error Message: ${error.message}
+
+Error Category: ${error.category || 'unknown'}
+
+Technical Details:
+${error.technicalDetails || error.stack || 'No additional details'}
+
+Partial Output:
+${error.partialOutput || 'No output captured'}
+
+Captured Stderr:
+${this.capturedStderr || 'No stderr captured'}
+
+═══════════════════════════════════════════════════════════
+`;
+        await fsPromises.writeFile(errorLogFile, errorContent);
+        logger.info(`Error details saved to: ${errorLogFile}`);
+      } catch (logError) {
+        logger.warn(`Failed to save error log: ${logError.message}`);
+      }
+
       throw error;
     } finally {
       // Cleanup worktree if auto-cleanup enabled (default: true)
@@ -600,7 +731,8 @@ Execution completed at: ${new Date().toISOString()}
       logger.debug(`Starting Claude CLI execution with timeout: ${timeout}ms`);
 
       // Use stdin to pass prompt - avoids shell injection
-      const claude = spawn('claude', ['--permission-mode', 'acceptEdits'], {
+      // Add --debug flag to get more detailed error information
+      const claude = spawn('claude', ['--permission-mode', 'acceptEdits', '--debug'], {
         cwd: cwd,
         shell: false,  // FIXED: Don't use shell
         env: this.getSanitizedEnv()
@@ -627,6 +759,9 @@ Execution completed at: ${new Date().toISOString()}
         const chunk = data.toString();
         stdout += chunk;
 
+        // Detect and emit events from stdout
+        this.detectAndEmitEvents(chunk);
+
         // Send progress updates
         if (onProgress) {
           onProgress(chunk);
@@ -634,8 +769,17 @@ Execution completed at: ${new Date().toISOString()}
       });
 
       claude.stderr.on('data', (data) => {
-        stderr += data.toString();
-        logger.warn('Claude stderr:', data.toString());
+        const stderrChunk = data.toString();
+        stderr += stderrChunk;
+        logger.debug('Claude stderr:', stderrChunk);
+
+        // Detect and emit events from stderr (Claude outputs a lot to stderr)
+        this.detectAndEmitEvents(stderrChunk);
+
+        // Stream stderr to progress callback for visibility
+        if (onProgress) {
+          onProgress(stderrChunk);
+        }
       });
 
       claude.on('close', (code) => {
@@ -686,11 +830,41 @@ Execution completed at: ${new Date().toISOString()}
     if (!this.apiClient || !this.currentJobId) return;
 
     try {
-      // Detect file modifications
+      // Detect Claude Code tool usage (Read, Write, Edit, Bash, etc.)
+      const toolPatterns = [
+        { pattern: /Reading\s+([^\s\n]+)/i, type: 'read_file', getMessage: (m) => `Reading ${path.basename(m[1])}` },
+        { pattern: /Writing\s+to\s+([^\s\n]+)/i, type: 'write_file', getMessage: (m) => `Writing ${path.basename(m[1])}` },
+        { pattern: /Editing\s+([^\s\n]+)/i, type: 'edit_file', getMessage: (m) => `Editing ${path.basename(m[1])}` },
+        { pattern: /Searching\s+for\s+['"](.*?)['"]/i, type: 'search', getMessage: (m) => `Searching for "${m[1]}"` },
+        { pattern: /Executing:\s*(.+?)(?:\n|$)/i, type: 'bash_command', getMessage: (m) => `Running: ${m[1].substring(0, 50)}${m[1].length > 50 ? '...' : ''}` },
+        { pattern: /(?:Running|Executing)\s+bash:\s*(.+?)(?:\n|$)/i, type: 'bash_command', getMessage: (m) => `Running: ${m[1].substring(0, 50)}${m[1].length > 50 ? '...' : ''}` }
+      ];
+
+      for (const { pattern, type, getMessage } of toolPatterns) {
+        const match = chunk.match(pattern);
+        if (match) {
+          const message = getMessage(match);
+          const filename = match[1] ? match[1].replace(/[`'"]/g, '').trim() : null;
+
+          logger.debug(`Detected ${type}: ${message}`);
+          this.apiClient.sendStatusEvent(
+            this.currentJobId,
+            type,
+            message,
+            filename ? { filename } : {}
+          ).catch(error => {
+            logger.debug(`Event emission error: ${error.message}`);
+          });
+          return; // Only emit one event per chunk
+        }
+      }
+
+      // Detect file modifications (more comprehensive patterns)
       const filePatterns = [
         /(?:Writing to|Created file|Modified file|Editing)\s+([^\s\n]+)/i,
         /(?:Successfully (?:created|modified|updated))\s+([^\s\n]+)/i,
-        /File\s+([^\s\n]+)\s+(?:created|modified|updated)/i
+        /File\s+([^\s\n]+)\s+(?:created|modified|updated)/i,
+        /(?:Created|Updated|Modified):\s+([^\s\n]+)/i
       ];
 
       for (const pattern of filePatterns) {
@@ -698,6 +872,7 @@ Execution completed at: ${new Date().toISOString()}
         if (match && match[1]) {
           const filename = match[1].replace(/[`'"]/g, '').trim();
           if (filename && !filename.includes('...')) {
+            logger.debug(`File modified: ${filename}`);
             this.apiClient.sendStatusEvent(
               this.currentJobId,
               'file_modified',
@@ -706,24 +881,39 @@ Execution completed at: ${new Date().toISOString()}
             ).catch(error => {
               logger.debug(`Event emission error: ${error.message}`);
             });
-            break; // Only emit one event per chunk
+            return;
           }
         }
       }
 
-      // Detect git commits
-      if (/git commit|committed changes|Created commit/i.test(chunk)) {
+      // Detect git operations
+      if (/git commit|committed changes|Created commit|Committing changes/i.test(chunk)) {
+        logger.debug('Git commit detected');
         this.apiClient.sendStatusEvent(
           this.currentJobId,
           'git_commit',
-          'Changes committed'
+          'Committing changes...'
         ).catch(error => {
           logger.debug(`Event emission error: ${error.message}`);
         });
+        return;
+      }
+
+      if (/git add|Staging changes|Adding files/i.test(chunk)) {
+        logger.debug('Git add detected');
+        this.apiClient.sendStatusEvent(
+          this.currentJobId,
+          'git_add',
+          'Staging changes...'
+        ).catch(error => {
+          logger.debug(`Event emission error: ${error.message}`);
+        });
+        return;
       }
 
       // Detect test execution
-      if (/Running tests|running test|bin\/rails test|npm test|pytest/i.test(chunk)) {
+      if (/Running tests|running test|bin\/rails test|npm test|pytest|rspec|jest/i.test(chunk)) {
+        logger.debug('Test execution detected');
         this.apiClient.sendStatusEvent(
           this.currentJobId,
           'tests_running',
@@ -731,10 +921,42 @@ Execution completed at: ${new Date().toISOString()}
         ).catch(error => {
           logger.debug(`Event emission error: ${error.message}`);
         });
+        return;
+      }
+
+      // Detect planning/thinking
+      if (/(?:Planning|Thinking|Analyzing|Considering)/i.test(chunk)) {
+        // Only log planning once per job to avoid spam
+        if (!this.planningDetected) {
+          this.planningDetected = true;
+          logger.debug('Planning phase detected');
+          this.apiClient.sendStatusEvent(
+            this.currentJobId,
+            'planning',
+            'Analyzing codebase and planning changes...'
+          ).catch(error => {
+            logger.debug(`Event emission error: ${error.message}`);
+          });
+        }
+        return;
+      }
+
+      // Detect completion signals
+      if (/<promise>COMPLETE<\/promise>/i.test(chunk)) {
+        logger.debug('Completion promise detected');
+        this.apiClient.sendStatusEvent(
+          this.currentJobId,
+          'completion_detected',
+          'Task completed'
+        ).catch(error => {
+          logger.debug(`Event emission error: ${error.message}`);
+        });
+        return;
       }
 
       // Detect cleanup phase
       if (/cleanup|cleaning up|removing temporary/i.test(chunk)) {
+        logger.debug('Cleanup phase detected');
         this.apiClient.sendStatusEvent(
           this.currentJobId,
           'cleanup_started',
@@ -742,6 +964,7 @@ Execution completed at: ${new Date().toISOString()}
         ).catch(error => {
           logger.debug(`Event emission error: ${error.message}`);
         });
+        return;
       }
     } catch (error) {
       // Silently ignore event emission errors to avoid disrupting execution
@@ -804,8 +1027,19 @@ Execution completed at: ${new Date().toISOString()}
       });
 
       ralph.stderr.on('data', (data) => {
-        stderr += data.toString();
-        logger.warn('Ralph stderr:', data.toString());
+        const stderrChunk = data.toString();
+        stderr += stderrChunk;
+        // Save to instance variable for log file
+        this.capturedStderr = (this.capturedStderr || '') + stderrChunk;
+        logger.debug('Ralph stderr:', stderrChunk);
+
+        // Detect and emit events from stderr too (Claude outputs a lot to stderr)
+        this.detectAndEmitEvents(stderrChunk);
+
+        // Stream stderr to progress callback for visibility
+        if (onProgress) {
+          onProgress(stderrChunk);
+        }
       });
 
       ralph.on('close', (code) => {

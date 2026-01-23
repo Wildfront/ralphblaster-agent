@@ -1,9 +1,20 @@
 const { spawn } = require('child_process');
 const { EventEmitter } = require('events');
+const fs = require('fs');
+const fsPromises = require('fs').promises;
 const Executor = require('../src/executor');
 
 jest.mock('child_process');
-jest.mock('fs');
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+  promises: {
+    mkdir: jest.fn(),
+    writeFile: jest.fn(),
+    appendFile: jest.fn(),
+    copyFile: jest.fn(),
+    access: jest.fn()
+  }
+}));
 jest.mock('../src/config', () => ({
   apiUrl: 'https://test-api.com',
   apiToken: 'test-token',
@@ -17,6 +28,12 @@ describe('Executor Error Paths', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     executor = new Executor();
+
+    // Setup fs.promises mocks to return resolved promises
+    fsPromises.mkdir.mockResolvedValue(undefined);
+    fsPromises.writeFile.mockResolvedValue(undefined);
+    fsPromises.appendFile.mockResolvedValue(undefined);
+    fs.existsSync.mockReturnValue(true);
   });
 
   describe('Claude stderr output', () => {
@@ -290,17 +307,20 @@ describe('Executor Error Paths', () => {
 
       const prdPromise = executor.executePrdGeneration(job, null, Date.now());
 
-      // Should spawn with process.cwd() not the invalid path
-      expect(spawn).toHaveBeenCalledWith(
-        'claude',
-        ['--permission-mode', 'acceptEdits'],
-        expect.objectContaining({
-          cwd: process.cwd() // Falls back to current directory
-        })
-      );
+      // Wait for async operations then check and emit
+      setTimeout(() => {
+        // Should spawn with process.cwd() not the invalid path
+        expect(spawn).toHaveBeenCalledWith(
+          'claude',
+          ['--permission-mode', 'acceptEdits', '--debug'],
+          expect.objectContaining({
+            cwd: process.cwd() // Falls back to current directory
+          })
+        );
 
-      mockProcess.stdout.emit('data', Buffer.from('PRD content'));
-      mockProcess.emit('close', 0);
+        mockProcess.stdout.emit('data', Buffer.from('PRD content'));
+        mockProcess.emit('close', 0);
+      }, 1);
 
       await prdPromise;
     });
@@ -332,13 +352,16 @@ describe('Executor Error Paths', () => {
 
       const prdPromise = executor.executePrdGeneration(job, null, Date.now());
 
-      // Should use the valid path (after sanitization/resolution)
-      const spawnCalls = spawn.mock.calls;
-      const spawnOptions = spawnCalls[0][2];
-      expect(spawnOptions.cwd).toContain('valid');
+      // Wait for async operations then check and emit
+      setTimeout(() => {
+        // Should use the valid path (after sanitization/resolution)
+        const spawnCalls = spawn.mock.calls;
+        const spawnOptions = spawnCalls[0][2];
+        expect(spawnOptions.cwd).toContain('valid');
 
-      mockProcess.stdout.emit('data', Buffer.from('PRD'));
-      mockProcess.emit('close', 0);
+        mockProcess.stdout.emit('data', Buffer.from('PRD'));
+        mockProcess.emit('close', 0);
+      }, 1);
 
       await prdPromise;
     });

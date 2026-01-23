@@ -1,13 +1,23 @@
 const Executor = require('../src/executor');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 
 // Mock child_process
 jest.mock('child_process');
 
 // Mock fs
-jest.mock('fs');
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+  promises: {
+    mkdir: jest.fn(),
+    writeFile: jest.fn(),
+    appendFile: jest.fn(),
+    copyFile: jest.fn(),
+    access: jest.fn()
+  }
+}));
 
 // Mock config
 jest.mock('../src/config', () => ({
@@ -31,6 +41,11 @@ describe('Executor - Job Execution', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     executor = new Executor();
+
+    // Setup fs.promises mocks to return resolved promises
+    fsPromises.mkdir.mockResolvedValue(undefined);
+    fsPromises.writeFile.mockResolvedValue(undefined);
+    fsPromises.appendFile.mockResolvedValue(undefined);
   });
 
   describe('execute()', () => {
@@ -170,7 +185,7 @@ describe('Executor - Job Execution', () => {
 
       expect(spawn).toHaveBeenCalledWith(
         'claude',
-        ['--permission-mode', 'acceptEdits'],
+        ['--permission-mode', 'acceptEdits', '--debug'],
         expect.objectContaining({
           cwd: process.cwd()
         })

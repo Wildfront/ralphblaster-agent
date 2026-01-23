@@ -1,0 +1,9 @@
+{
+  "name": "ralph",
+  "version": "1.0.0",
+  "description": "Ralph PRD converter skill - converts markdown PRDs to structured JSON for autonomous agent execution",
+  "author": {
+    "name": "Wildfront LLC",
+    "email": "support@wildfront.io"
+  }
+}

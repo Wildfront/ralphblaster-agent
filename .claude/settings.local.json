@@ -47,7 +47,17 @@
       "Bash(ralphblaster --help:*)",
       "Bash(timeout 3 ralphblaster:*)",
       "Bash(npm publish)",
-      "Bash(ralphblaster)"
+      "Bash(ralphblaster)",
+      "Bash(claude --version:*)",
+      "mcp__render__get_selected_workspace",
+      "mcp__render__list_services",
+      "mcp__render__list_workspaces",
+      "mcp__render__select_workspace",
+      "mcp__render__list_deploys",
+      "Bash(env)",
+      "Bash(jobs:*)",
+      "Bash(pgrep:*)",
+      "Bash(export RALPH_LOG_LEVEL=debug)"
     ]
   }
 }

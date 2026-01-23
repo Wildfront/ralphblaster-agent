@@ -1,9 +1,20 @@
 const { spawn } = require('child_process');
 const { EventEmitter } = require('events');
+const fs = require('fs');
+const fsPromises = require('fs').promises;
 const Executor = require('../src/executor');
 
 jest.mock('child_process');
-jest.mock('fs');
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+  promises: {
+    mkdir: jest.fn(),
+    writeFile: jest.fn(),
+    appendFile: jest.fn(),
+    copyFile: jest.fn(),
+    access: jest.fn()
+  }
+}));
 jest.mock('../src/config', () => ({
   apiUrl: 'https://test-api.com',
   apiToken: 'test-token',
@@ -23,6 +34,12 @@ describe('Executor - Plan Generation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     executor = new Executor();
+
+    // Setup fs.promises mocks to return resolved promises
+    fsPromises.mkdir.mockResolvedValue(undefined);
+    fsPromises.writeFile.mockResolvedValue(undefined);
+    fsPromises.appendFile.mockResolvedValue(undefined);
+    fs.existsSync.mockReturnValue(true);
   });
 
   describe('executePlanGeneration()', () => {
@@ -87,10 +104,12 @@ describe('Executor - Plan Generation', () => {
 
       const planPromise = executor.executePlanGeneration(job, jest.fn(), Date.now());
 
-      expect(mockProcess.stdin.write).toHaveBeenCalledWith(serverPrompt);
-
-      mockProcess.stdout.emit('data', Buffer.from('Plan output'));
-      mockProcess.emit('close', 0);
+      // Wait for async operations to complete before emitting events
+      setTimeout(() => {
+        expect(mockProcess.stdin.write).toHaveBeenCalledWith(serverPrompt);
+        mockProcess.stdout.emit('data', Buffer.from('Plan output'));
+        mockProcess.emit('close', 0);
+      }, 1);
 
       await planPromise;
     });
@@ -124,8 +143,11 @@ describe('Executor - Plan Generation', () => {
 3. Step three
       `.trim();
 
-      mockProcess.stdout.emit('data', Buffer.from(planContent));
-      mockProcess.emit('close', 0);
+      // Wait for async operations to complete before emitting events
+      setTimeout(() => {
+        mockProcess.stdout.emit('data', Buffer.from(planContent));
+        mockProcess.emit('close', 0);
+      }, 1);
 
       const result = await planPromise;
 
@@ -188,8 +210,11 @@ describe('Executor - Plan Generation', () => {
 
       const planPromise = executor.executePlanGeneration(job, jest.fn(), Date.now());
 
-      mockProcess.stderr.emit('data', Buffer.from('Error occurred'));
-      mockProcess.emit('close', 1);
+      // Wait for async operations to complete before emitting events
+      setTimeout(() => {
+        mockProcess.stderr.emit('data', Buffer.from('Error occurred'));
+        mockProcess.emit('close', 1);
+      }, 1);
 
       await expect(planPromise).rejects.toThrow();
       expect(logger.error).toHaveBeenCalledWith(
@@ -218,17 +243,20 @@ describe('Executor - Plan Generation', () => {
 
       const planPromise = executor.executePlanGeneration(job, jest.fn(), Date.now());
 
-      // Should use process.cwd()
-      expect(spawn).toHaveBeenCalledWith(
-        'claude',
-        ['--permission-mode', 'acceptEdits'],
-        expect.objectContaining({
-          cwd: process.cwd()
-        })
-      );
+      // Wait for async operations to complete before checking spawn
+      setTimeout(() => {
+        // Should use process.cwd()
+        expect(spawn).toHaveBeenCalledWith(
+          'claude',
+          ['--permission-mode', 'acceptEdits', '--debug'],
+          expect.objectContaining({
+            cwd: process.cwd()
+          })
+        );
 
-      mockProcess.stdout.emit('data', Buffer.from('Plan'));
-      mockProcess.emit('close', 0);
+        mockProcess.stdout.emit('data', Buffer.from('Plan'));
+        mockProcess.emit('close', 0);
+      }, 1);
 
       await planPromise;
     });
@@ -256,16 +284,19 @@ describe('Executor - Plan Generation', () => {
 
       const planPromise = executor.executePlanGeneration(job, jest.fn(), Date.now());
 
-      expect(spawn).toHaveBeenCalledWith(
-        'claude',
-        ['--permission-mode', 'acceptEdits'],
-        expect.objectContaining({
-          cwd: process.cwd()
-        })
-      );
+      // Wait for async operations to complete before checking spawn
+      setTimeout(() => {
+        expect(spawn).toHaveBeenCalledWith(
+          'claude',
+          ['--permission-mode', 'acceptEdits', '--debug'],
+          expect.objectContaining({
+            cwd: process.cwd()
+          })
+        );
 
-      mockProcess.stdout.emit('data', Buffer.from('Plan'));
-      mockProcess.emit('close', 0);
+        mockProcess.stdout.emit('data', Buffer.from('Plan'));
+        mockProcess.emit('close', 0);
+      }, 1);
 
       await planPromise;
     });

@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
 // ANSI color codes
 const colors = {
   reset: '\x1b[0m',
@@ -36,6 +40,8 @@ ${colors.gray}           /\\
     ${colors.bright}${colors.yellow}'   ${colors.reset}${colors.orange}|${colors.reset}${colors.gray}    ${colors.orange}|   ${colors.bright}${colors.yellow}'${colors.reset}
         ${colors.orange}|${colors.reset}${colors.gray}    ${colors.orange}|${colors.reset}
 `;
+
+// No plugin installation needed - skill is bundled with the agent
 
 const message = `
 ${ralph}
