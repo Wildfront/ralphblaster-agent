@@ -48,6 +48,7 @@ Usage:
 Commands:
   (default)             Start the agent in polling mode
   init                  Initialize current directory as a RalphBlaster project
+  add-project           Add current directory as a RalphBlaster project (alias for init)
 
 Options:
   --agents=<count>      Run multiple agents concurrently (1-20, default: 1)
@@ -106,6 +107,17 @@ if (args.includes('init')) {
   const initCmd = new InitCommand();
   initCmd.run().catch(error => {
     // Error handling is done in InitCommand.handleError
+    // Just exit with error code
+  });
+  return; // Don't start agent polling loop
+}
+
+// Check for add-project command (alias for init)
+if (args.includes('add-project')) {
+  const AddProjectCommand = require('../src/commands/add-project');
+  const addProjectCmd = new AddProjectCommand();
+  addProjectCmd.run().catch(error => {
+    // Error handling is done in AddProjectCommand.handleError
     // Just exit with error code
   });
   return; // Don't start agent polling loop
