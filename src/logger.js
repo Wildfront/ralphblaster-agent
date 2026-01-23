@@ -192,11 +192,17 @@ function log(level, message, data = null) {
     // Send to API if job context is set (for info and error levels only)
     // This makes internal logs visible in the UI's "Instance Setup Logs" section
     // Uses batching to reduce API overhead (10 logs -> 1 API call)
+    // ERROR level logs are flushed immediately for visibility
     if (jobContext.batcher && (level === 'info' || level === 'error')) {
       const formattedMessage = formatMessage(safeMessage, enrichedData);
 
       // Send structured metadata to API (Phase 3)
       jobContext.batcher.add(level, formattedMessage, enrichedData);
+
+      // Immediately flush error logs for visibility (don't wait for batch)
+      if (level === 'error') {
+        jobContext.batcher.flush().catch(() => {}); // Best-effort immediate flush
+      }
     }
   }
 }
