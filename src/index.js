@@ -72,7 +72,7 @@ class RalphAgent {
           'Agent shutdown during execution'
         );
       } catch (error) {
-        logger.error('Failed to mark job as failed during shutdown', error.message);
+        logger.error('Failed to mark job as failed during shutdown: ' + error.message);
       }
     }
 
@@ -140,6 +140,16 @@ class RalphAgent {
     this.jobCompleting = false;
     this.jobStartTime = Date.now(); // Track start time for elapsed time calculation
 
+    logger.info('═══════════════════════════════════════════════════════════');
+    logger.info(`Processing Job #${job.id}`, {
+      jobType: job.job_type,
+      taskTitle: job.task_title,
+      projectName: job.project?.name,
+      hasPrompt: !!job.prompt,
+      promptLength: job.prompt?.length || 0
+    });
+    logger.info('═══════════════════════════════════════════════════════════');
+
     // Set logger context so internal logs are sent to UI (Phase 3: with global context)
     logger.setJobContext(job.id, this.apiClient, {
       jobType: job.job_type,
@@ -150,55 +160,95 @@ class RalphAgent {
 
     try {
       // Mark job as running
+      logger.info('Marking job as running...');
       await this.apiClient.markJobRunning(job.id);
+      logger.info('Job marked as running in API');
 
       // Send initial status event
+      logger.info('Sending initial status event to UI...');
       await this.apiClient.sendStatusEvent(job.id, 'job_claimed', `Starting: ${job.task_title}`);
 
       // Start heartbeat to keep job alive
+      logger.info('Starting heartbeat timer...');
       this.startHeartbeat(job.id);
 
       // Execute the job with progress callback
+      logger.info('Beginning job execution...');
       const result = await this.executor.execute(job, async (chunk) => {
         // Send progress update to server
         try {
           await this.apiClient.sendProgress(job.id, chunk);
         } catch (error) {
-          logger.warn(`Failed to send progress update for job #${job.id}`, error.message);
+          logger.warn(`Failed to send progress update for job #${job.id}: ${error.message}`);
           // Don't fail the job if progress update fails
         }
       });
 
+      logger.info('Job execution completed, processing results...');
+
       // Set flag to prevent heartbeat race conditions, then stop heartbeat
       this.jobCompleting = true;
       this.stopHeartbeat();
+      logger.info('Heartbeat stopped');
 
       // Mark job as completed
+      logger.info('Marking job as completed in API...');
       await this.apiClient.markJobCompleted(job.id, result);
 
-      logger.info(`Job #${job.id} completed successfully`);
+      const executionTime = Date.now() - this.jobStartTime;
+      logger.info('═══════════════════════════════════════════════════════════');
+      logger.info(`✓ Job #${job.id} completed successfully`, {
+        executionTimeMs: executionTime,
+        executionTime: this.formatDuration(executionTime)
+      });
+      logger.info('═══════════════════════════════════════════════════════════');
     } catch (error) {
+      const executionTime = Date.now() - this.jobStartTime;
+      logger.error('═══════════════════════════════════════════════════════════');
+      logger.error(`✗ Job #${job.id} failed after ${this.formatDuration(executionTime)}`, {
+        error: error.message,
+        category: error.category,
+        hasPartialOutput: !!error.partialOutput
+      });
+      logger.error('═══════════════════════════════════════════════════════════');
+
       // Set flag to prevent heartbeat race conditions, then stop heartbeat
       this.jobCompleting = true;
       this.stopHeartbeat();
 
       // Mark job as failed (pass full error object to include categorization)
+      logger.info('Marking job as failed in API...');
       await this.apiClient.markJobFailed(
         job.id,
         error,  // Pass full error object instead of just message
         error.partialOutput || null
       );
 
-      logger.error(`Job #${job.id} failed`, error.message);
+      logger.error(`Job #${job.id} marked as failed in API`);
     } finally {
       // Clear logger context (flush remaining batched logs)
+      logger.info('Flushing remaining logs to API...');
       await logger.clearJobContext();
+      logger.info('Logger context cleared');
 
       // Clear current job reference and reset completion flag
       this.currentJob = null;
       this.jobCompleting = false;
       this.jobStartTime = null;
     }
+  }
+
+  /**
+   * Format duration in human-readable form
+   * @param {number} ms - Duration in milliseconds
+   * @returns {string} Formatted duration
+   */
+  formatDuration(ms) {
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${minutes}m ${seconds}s`;
   }
 
   /**
@@ -231,7 +281,7 @@ class RalphAgent {
           { elapsed_ms: elapsed }
         );
       } catch (err) {
-        logger.warn('Heartbeat failed', err.message);
+        logger.warn('Heartbeat failed: ' + err.message);
       }
     }, HEARTBEAT_INTERVAL_MS);
   }
@@ -261,12 +311,14 @@ class RalphAgent {
     });
 
     process.on('uncaughtException', (error) => {
-      logger.error('Uncaught exception', error);
+      logger.error('Uncaught exception: ' + (error?.message || error));
+      console.error(error); // Also log full error with stack trace
       this.stop();
     });
 
     process.on('unhandledRejection', (reason, promise) => {
-      logger.error('Unhandled rejection', reason);
+      logger.error('Unhandled rejection: ' + (reason?.message || reason));
+      console.error(reason); // Also log full reason with stack trace
       this.stop();
     });
   }
