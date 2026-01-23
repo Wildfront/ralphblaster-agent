@@ -57,7 +57,12 @@
       "Bash(env)",
       "Bash(jobs:*)",
       "Bash(pgrep:*)",
-      "Bash(export RALPH_LOG_LEVEL=debug)"
+      "Bash(export RALPH_LOG_LEVEL=debug)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(node -c:*)",
+      "Bash(ruby -c:*)",
+      "Bash(brew list:*)"
     ]
   }
 }
