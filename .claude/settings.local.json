@@ -67,7 +67,11 @@
       "Bash(git stash:*)",
       "Bash(claude --print)",
       "Bash(node bin/ralph-agent.js:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(tree:*)",
+      "Bash(if [ -f /Users/macmartine/src/ralph-agent/src/executor.js.backup ])",
+      "Bash(then wc -l /Users/macmartine/src/ralph-agent/src/executor.js.backup)",
+      "Bash(else echo \"Backup not found, calculating from git\")"
     ]
   }
 }
