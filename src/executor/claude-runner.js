@@ -148,6 +148,7 @@ class ClaudeRunner {
       let stdout = '';
       let stderr = '';
       let finalResult = '';
+      let assistantTextContent = ''; // Collect all assistant text for PRD content
       let lineBuffer = '';
 
       claude.stdout.on('data', (data) => {
@@ -169,6 +170,15 @@ class ClaudeRunner {
             // Extract final result text
             if (event.type === 'result' && event.result) {
               finalResult = event.result;
+            }
+
+            // Extract assistant text content for PRD generation
+            if (event.type === 'assistant' && event.message?.content) {
+              for (const content of event.message.content) {
+                if (content.type === 'text' && content.text) {
+                  assistantTextContent += content.text + '\n';
+                }
+              }
             }
 
             // Detect and emit events
@@ -205,6 +215,14 @@ class ClaudeRunner {
             if (event.type === 'result' && event.result) {
               finalResult = event.result;
             }
+            // Extract assistant text from remaining buffer
+            if (event.type === 'assistant' && event.message?.content) {
+              for (const content of event.message.content) {
+                if (content.type === 'text' && content.text) {
+                  assistantTextContent += content.text + '\n';
+                }
+              }
+            }
           } catch (e) {
             // Ignore incomplete JSON
           }
@@ -213,13 +231,17 @@ class ClaudeRunner {
         logger.info(`Claude CLI process exited`, {
           exitCode: code,
           stdoutLength: stdout.length,
-          stderrLength: stderr.length
+          stderrLength: stderr.length,
+          assistantTextLength: assistantTextContent.length
         });
 
         if (code === 0) {
           logger.info('Claude CLI execution completed successfully');
-          // Return the extracted result text, falling back to raw stdout
-          resolve(finalResult || stdout);
+          // For PRD generation, prefer assistant text content over summary result
+          // For code execution, fall back to finalResult or raw stdout
+          const output = assistantTextContent.trim() || finalResult || stdout;
+          logger.debug(`Returning output (source: ${assistantTextContent.trim() ? 'assistant_text' : finalResult ? 'final_result' : 'stdout'})`);
+          resolve(output);
         } else {
           logger.error(`Claude CLI exited with non-zero code ${code}`);
           logger.error('Last 1000 chars of stderr:', stderr.slice(-1000));
@@ -344,6 +366,7 @@ class ClaudeRunner {
     let output = '';
     let errorOutput = '';
     let finalResult = '';
+    let assistantTextContent = ''; // Collect all assistant text
     let lineBuffer = '';
 
     return new Promise((resolve, reject) => {
@@ -367,6 +390,15 @@ class ClaudeRunner {
             // Extract final result text
             if (event.type === 'result' && event.result) {
               finalResult = event.result;
+            }
+
+            // Extract assistant text content
+            if (event.type === 'assistant' && event.message?.content) {
+              for (const content of event.message.content) {
+                if (content.type === 'text' && content.text) {
+                  assistantTextContent += content.text + '\n';
+                }
+              }
             }
 
             // Detect and emit events
@@ -420,6 +452,14 @@ class ClaudeRunner {
             if (event.type === 'result' && event.result) {
               finalResult = event.result;
             }
+            // Extract assistant text from remaining buffer
+            if (event.type === 'assistant' && event.message?.content) {
+              for (const content of event.message.content) {
+                if (content.type === 'text' && content.text) {
+                  assistantTextContent += content.text + '\n';
+                }
+              }
+            }
           } catch (e) {
             // Ignore incomplete JSON
           }
@@ -431,8 +471,11 @@ class ClaudeRunner {
           // Get branch name from worktree
           const branchName = await this.gitHelper.getCurrentBranch(worktreePath);
 
+          // Prefer assistant text content over summary result
+          const outputText = assistantTextContent.trim() || finalResult || output;
+
           resolve({
-            output: finalResult || output,
+            output: outputText,
             branchName,
             duration
           });
