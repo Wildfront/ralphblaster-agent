@@ -1,7 +1,7 @@
 const fs = require('fs');
-const fsPromises = require('fs').promises;
 const path = require('path');
 const logger = require('../../logger');
+const LogFileHelper = require('../../utils/log-file-helper');
 
 /**
  * PrdGenerationHandler - Handles PRD and Plan generation jobs
@@ -16,13 +16,13 @@ class PrdGenerationHandler {
   /**
    * Create a new PRD generation handler
    * @param {Object} promptValidator - Prompt validator with validatePrompt method
-   * @param {Object} pathValidator - Path validator with validateAndSanitizePath method
+   * @param {Object} pathHelper - Helper for path validation and sanitization
    * @param {Object} claudeRunner - Claude runner with runClaude method
    * @param {Object} apiClient - Optional API client for status updates
    */
-  constructor(promptValidator, pathValidator, claudeRunner, apiClient = null) {
+  constructor(promptValidator, pathHelper, claudeRunner, apiClient = null) {
     this.promptValidator = promptValidator;
-    this.pathValidator = pathValidator;
+    this.pathHelper = pathHelper;
     this.claudeRunner = claudeRunner;
     this.apiClient = apiClient;
   }
@@ -50,37 +50,24 @@ class PrdGenerationHandler {
     this.promptValidator.validatePrompt(prompt);
     logger.info('Prompt validation passed');
 
+    let logStream = null;
     try {
       // Determine and sanitize working directory
       logger.info('Determining working directory...');
-      let workingDir = process.cwd();
-      if (job.project?.system_path) {
-        logger.info('Project path provided, validating...', { path: job.project.system_path });
-        const sanitizedPath = this.pathValidator.validateAndSanitizePath(job.project.system_path);
-        if (sanitizedPath && fs.existsSync(sanitizedPath)) {
-          workingDir = sanitizedPath;
-          logger.info('Using project directory', { workingDir });
-        } else {
-          logger.warn(`Invalid or missing project path, using current directory: ${process.cwd()}`);
-        }
-      } else {
-        logger.info('No project path provided, using current directory', { workingDir });
-      }
+      const workingDir = this.pathHelper.validateProjectPathWithFallback(
+        job.project?.system_path,
+        process.cwd()
+      );
 
       // Setup log file for streaming PRD generation output
       logger.info('Setting up log file...');
-      const logDir = path.join(workingDir, '.ralph-logs');
-      await fsPromises.mkdir(logDir, { recursive: true });
-      const logFile = path.join(logDir, `job-${job.id}.log`);
-
-      // Write initial log header
-      const logHeader = `═══════════════════════════════════════════════════════════
-PRD Generation Job #${job.id} - ${job.task_title}
-Started: ${new Date(startTime).toISOString()}
-═══════════════════════════════════════════════════════════
-
-`;
-      await fsPromises.writeFile(logFile, logHeader);
+      const { logFile, logStream: stream } = await LogFileHelper.createJobLogStream(
+        workingDir,
+        job,
+        startTime,
+        'PRD Generation'
+      );
+      logStream = stream;
       logger.info(`PRD generation log created at: ${logFile}`);
 
       // Send status event to UI
@@ -89,27 +76,12 @@ Started: ${new Date(startTime).toISOString()}
       }
 
       // Create a wrapper onProgress that also writes to log file
-      let totalChunks = 0;
-      const logAndProgress = async (chunk) => {
-        totalChunks++;
-
-        // Append chunk to log file
-        try {
-          await fsPromises.appendFile(logFile, chunk);
-        } catch (err) {
-          logger.warn(`Failed to append to log file: ${err.message}`);
-        }
-
-        // Log progress periodically (every 50 chunks to avoid spam)
-        if (totalChunks % 50 === 0) {
-          logger.debug(`PRD generation progress: ${totalChunks} chunks received`);
-        }
-
-        // Call original progress callback if provided
-        if (onProgress) {
-          onProgress(chunk);
-        }
-      };
+      const logAndProgress = LogFileHelper.createLogAndProgressCallbackStream(
+        logStream,
+        onProgress,
+        logger,
+        { progressMessage: 'PRD generation progress' }
+      );
 
       // Use Claude Code with server-provided template (no longer using /prd skill)
       logger.info('Invoking Claude Code for PRD generation...');
@@ -117,17 +89,12 @@ Started: ${new Date(startTime).toISOString()}
       const output = await this.claudeRunner.runClaude(prompt, workingDir, logAndProgress);
       logger.info('Claude Code execution completed', {
         outputLength: output.length,
-        totalChunks
+        totalChunks: logAndProgress.totalChunks
       });
 
       // Write completion footer to log
       logger.info('Writing completion footer to log file...');
-      const logFooter = `
-═══════════════════════════════════════════════════════════
-PRD Generation completed at: ${new Date().toISOString()}
-═══════════════════════════════════════════════════════════
-`;
-      await fsPromises.appendFile(logFile, logFooter);
+      LogFileHelper.writeCompletionFooterToStream(logStream, 'PRD Generation');
       logger.info(`PRD generation log completed: ${logFile}`);
 
       // Send completion status event
@@ -164,6 +131,11 @@ PRD Generation completed at: ${new Date().toISOString()}
       }
 
       throw error;
+    } finally {
+      // Ensure log stream is properly closed
+      if (logStream) {
+        logStream.end();
+      }
     }
   }
 
@@ -178,56 +150,37 @@ PRD Generation completed at: ${new Date().toISOString()}
     // Use the server-provided prompt (already formatted with template system)
     const prompt = job.prompt;
 
+    let logStream = null;
     try {
       // Determine working directory
-      let workingDir = process.cwd();
-      if (job.project?.system_path) {
-        const sanitizedPath = this.pathValidator.validateAndSanitizePath(job.project.system_path);
-        if (sanitizedPath && fs.existsSync(sanitizedPath)) {
-          workingDir = sanitizedPath;
-        }
-      }
+      const workingDir = this.pathHelper.validateProjectPathWithFallback(
+        job.project?.system_path,
+        process.cwd()
+      );
 
       // Setup log file for streaming plan generation output
-      const logDir = path.join(workingDir, '.ralph-logs');
-      await fsPromises.mkdir(logDir, { recursive: true });
-      const logFile = path.join(logDir, `job-${job.id}.log`);
-
-      // Write initial log header
-      const logHeader = `═══════════════════════════════════════════════════════════
-Plan Generation Job #${job.id} - ${job.task_title}
-Started: ${new Date(startTime).toISOString()}
-═══════════════════════════════════════════════════════════
-
-`;
-      await fsPromises.writeFile(logFile, logHeader);
+      const { logFile, logStream: stream } = await LogFileHelper.createJobLogStream(
+        workingDir,
+        job,
+        startTime,
+        'Plan Generation'
+      );
+      logStream = stream;
       logger.info(`Plan generation log created at: ${logFile}`);
 
       // Create a wrapper onProgress that also writes to log file
-      const logAndProgress = async (chunk) => {
-        // Append chunk to log file
-        try {
-          await fsPromises.appendFile(logFile, chunk);
-        } catch (err) {
-          logger.warn(`Failed to append to log file: ${err.message}`);
-        }
-
-        // Call original progress callback if provided
-        if (onProgress) {
-          onProgress(chunk);
-        }
-      };
+      const logAndProgress = LogFileHelper.createLogAndProgressCallbackStream(
+        logStream,
+        onProgress,
+        logger,
+        { progressMessage: 'Plan generation progress' }
+      );
 
       // Use Claude Code to trigger planning mode
       const output = await this.claudeRunner.runClaude(prompt, workingDir, logAndProgress);
 
       // Write completion footer to log
-      const logFooter = `
-═══════════════════════════════════════════════════════════
-Plan Generation completed at: ${new Date().toISOString()}
-═══════════════════════════════════════════════════════════
-`;
-      await fsPromises.appendFile(logFile, logFooter);
+      LogFileHelper.writeCompletionFooterToStream(logStream, 'Plan Generation');
       logger.info(`Plan generation log completed: ${logFile}`);
 
       const executionTimeMs = Date.now() - startTime;
@@ -240,6 +193,11 @@ Plan Generation completed at: ${new Date().toISOString()}
     } catch (error) {
       logger.error(`Plan generation failed for job #${job.id}: ${error.message}`);
       throw error;
+    } finally {
+      // Ensure log stream is properly closed
+      if (logStream) {
+        logStream.end();
+      }
     }
   }
 }

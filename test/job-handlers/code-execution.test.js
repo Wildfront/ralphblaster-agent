@@ -26,7 +26,7 @@ jest.mock('../../src/logger', () => ({
 describe('CodeExecutionHandler', () => {
   let handler;
   let mockPromptValidator;
-  let mockPathValidator;
+  let mockPathHelper;
   let mockClaudeRunner;
   let mockGitHelper;
   let mockApiClient;
@@ -40,9 +40,10 @@ describe('CodeExecutionHandler', () => {
       validatePrompt: jest.fn()
     };
 
-    // Mock path validator
-    mockPathValidator = {
-      validateAndSanitizePath: jest.fn()
+    // Mock path helper
+    mockPathHelper = {
+      validateProjectPathStrict: jest.fn(),
+      validateProjectPathWithFallback: jest.fn()
     };
 
     // Mock Claude runner
@@ -79,7 +80,7 @@ describe('CodeExecutionHandler', () => {
     // Create handler instance
     handler = new CodeExecutionHandler(
       mockPromptValidator,
-      mockPathValidator,
+      mockPathHelper,
       mockClaudeRunner,
       mockGitHelper,
       mockApiClient
@@ -89,7 +90,7 @@ describe('CodeExecutionHandler', () => {
   describe('constructor', () => {
     test('initializes with all dependencies', () => {
       expect(handler.promptValidator).toBe(mockPromptValidator);
-      expect(handler.pathValidator).toBe(mockPathValidator);
+      expect(handler.pathHelper).toBe(mockPathHelper);
       expect(handler.claudeRunner).toBe(mockClaudeRunner);
       expect(handler.gitHelper).toBe(mockGitHelper);
       expect(handler.apiClient).toBe(mockApiClient);
@@ -98,7 +99,7 @@ describe('CodeExecutionHandler', () => {
     test('works without optional apiClient', () => {
       const handlerWithoutApi = new CodeExecutionHandler(
         mockPromptValidator,
-        mockPathValidator,
+        mockPathHelper,
         mockClaudeRunner,
         mockGitHelper
       );
@@ -125,7 +126,7 @@ describe('CodeExecutionHandler', () => {
     describe('validation', () => {
       test('validates prompt for security', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -147,7 +148,9 @@ describe('CodeExecutionHandler', () => {
 
       test('throws error for invalid project path', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue(null);
+        mockPathHelper.validateProjectPathStrict.mockImplementation(() => {
+          throw new Error('Invalid or unsafe project path: /test/project');
+        });
 
         await expect(handler.executeCodeImplementation(job, mockOnProgress, startTime))
           .rejects.toThrow('Invalid or unsafe project path: /test/project');
@@ -155,8 +158,9 @@ describe('CodeExecutionHandler', () => {
 
       test('throws error for non-existent project path', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
-        fs.existsSync.mockReturnValue(false);
+        mockPathHelper.validateProjectPathStrict.mockImplementation(() => {
+          throw new Error('Project path does not exist: /test/project');
+        });
 
         await expect(handler.executeCodeImplementation(job, mockOnProgress, startTime))
           .rejects.toThrow('Project path does not exist: /test/project');
@@ -164,7 +168,7 @@ describe('CodeExecutionHandler', () => {
 
       test('throws error when prompt is missing', async () => {
         const job = createMockJob({ prompt: '' });
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
 
         await expect(handler.executeCodeImplementation(job, mockOnProgress, startTime))
@@ -173,7 +177,7 @@ describe('CodeExecutionHandler', () => {
 
       test('throws error when prompt is only whitespace', async () => {
         const job = createMockJob({ prompt: '   ' });
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
 
         await expect(handler.executeCodeImplementation(job, mockOnProgress, startTime))
@@ -184,7 +188,7 @@ describe('CodeExecutionHandler', () => {
     describe('worktree management', () => {
       test('creates worktree before execution', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -206,7 +210,7 @@ describe('CodeExecutionHandler', () => {
 
       test('removes worktree on successful completion when auto-cleanup enabled', async () => {
         const job = createMockJob({ project: { system_path: '/test/project', auto_cleanup_worktrees: true } });
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -228,7 +232,7 @@ describe('CodeExecutionHandler', () => {
 
       test('keeps worktree when auto-cleanup disabled', async () => {
         const job = createMockJob({ project: { system_path: '/test/project', auto_cleanup_worktrees: false } });
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockWorktreeManager.getBranchName.mockReturnValue('feature/test');
@@ -251,7 +255,7 @@ describe('CodeExecutionHandler', () => {
 
       test('removes worktree on error when auto-cleanup enabled', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockRejectedValue(new Error('Claude failed'));
@@ -266,7 +270,7 @@ describe('CodeExecutionHandler', () => {
     describe('Claude execution', () => {
       test('runs Claude in worktree with prompt', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -293,7 +297,7 @@ describe('CodeExecutionHandler', () => {
 
       test('resets captured stderr before execution', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -317,7 +321,7 @@ describe('CodeExecutionHandler', () => {
     describe('git activity logging', () => {
       test('logs git activity after successful execution', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -344,7 +348,7 @@ describe('CodeExecutionHandler', () => {
 
       test('includes git activity in result', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -374,7 +378,7 @@ describe('CodeExecutionHandler', () => {
     describe('progress tracking', () => {
       test('sends setup events when apiClient available', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -406,7 +410,7 @@ describe('CodeExecutionHandler', () => {
 
       test('sends git operation events', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree/ralph-job-1');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -437,7 +441,7 @@ describe('CodeExecutionHandler', () => {
 
       test('sends Claude started events', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -463,7 +467,7 @@ describe('CodeExecutionHandler', () => {
 
       test('sends completion events', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -495,7 +499,7 @@ describe('CodeExecutionHandler', () => {
 
       test('updates job metadata with worktree path', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -521,13 +525,13 @@ describe('CodeExecutionHandler', () => {
       test('works without apiClient', async () => {
         const handlerWithoutApi = new CodeExecutionHandler(
           mockPromptValidator,
-          mockPathValidator,
+          mockPathHelper,
           mockClaudeRunner,
           mockGitHelper
         );
 
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -552,7 +556,7 @@ describe('CodeExecutionHandler', () => {
     describe('log file persistence', () => {
       test('saves execution output to log file', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -585,7 +589,7 @@ describe('CodeExecutionHandler', () => {
 
       test('saves stderr to separate error log if present', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.capturedStderr = 'Some error output';
@@ -611,7 +615,7 @@ describe('CodeExecutionHandler', () => {
 
       test('does not save stderr log when empty', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.capturedStderr = '';
@@ -636,7 +640,7 @@ describe('CodeExecutionHandler', () => {
 
       test('saves error details to log file on failure', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
 
@@ -667,7 +671,7 @@ describe('CodeExecutionHandler', () => {
 
       test('handles log save failures gracefully', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
@@ -695,7 +699,7 @@ describe('CodeExecutionHandler', () => {
     describe('return value', () => {
       test('returns complete result object', async () => {
         const job = createMockJob();
-        mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/project');
+        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
         fs.existsSync.mockReturnValue(true);
         mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
         mockClaudeRunner.runClaudeDirectly.mockResolvedValue({

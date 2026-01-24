@@ -3,6 +3,7 @@ const fsPromises = require('fs').promises;
 const path = require('path');
 const logger = require('../../logger');
 const WorktreeManager = require('../../worktree-manager');
+const LogFileHelper = require('../../utils/log-file-helper');
 
 /**
  * Handles code execution jobs
@@ -11,14 +12,14 @@ const WorktreeManager = require('../../worktree-manager');
 class CodeExecutionHandler {
   /**
    * @param {Object} promptValidator - Validator for prompt security
-   * @param {Object} pathValidator - Validator for path security
+   * @param {Object} pathHelper - Helper for path validation and sanitization
    * @param {Object} claudeRunner - Claude CLI runner
    * @param {Object} gitHelper - Git operations helper
    * @param {Object} apiClient - Optional API client for status updates
    */
-  constructor(promptValidator, pathValidator, claudeRunner, gitHelper, apiClient) {
+  constructor(promptValidator, pathHelper, claudeRunner, gitHelper, apiClient) {
     this.promptValidator = promptValidator;
-    this.pathValidator = pathValidator;
+    this.pathHelper = pathHelper;
     this.claudeRunner = claudeRunner;
     this.gitHelper = gitHelper;
     this.apiClient = apiClient;
@@ -37,16 +38,11 @@ class CodeExecutionHandler {
     // Reset captured stderr for this job
     this.claudeRunner.resetCapturedStderr();
 
-    // Validate and sanitize project path
-    const sanitizedPath = this.pathValidator.validateAndSanitizePath(job.project.system_path);
-    if (!sanitizedPath) {
-      throw new Error(`Invalid or unsafe project path: ${job.project.system_path}`);
-    }
-
-    // Validate project path exists
-    if (!fs.existsSync(sanitizedPath)) {
-      throw new Error(`Project path does not exist: ${sanitizedPath}`);
-    }
+    // Validate project path (strict mode - must exist)
+    const sanitizedPath = this.pathHelper.validateProjectPathStrict(
+      job.project.system_path,
+      'code_execution'
+    );
 
     // Server must provide prompt
     if (!job.prompt || !job.prompt.trim()) {
@@ -96,28 +92,20 @@ class CodeExecutionHandler {
       const gitActivitySummary = await this.gitHelper.logGitActivity(worktreePath, result.branchName, job.id, onProgress);
 
       // Save execution output to persistent log file (survives cleanup)
-      const logDir = path.join(sanitizedPath, '.ralph-logs');
       try {
-        await fsPromises.mkdir(logDir, { recursive: true });
-        const logFile = path.join(logDir, `job-${job.id}.log`);
-        const logContent = `
-═══════════════════════════════════════════════════════════
-Job #${job.id} - ${job.task_title}
-Started: ${new Date(startTime).toISOString()}
-═══════════════════════════════════════════════════════════
-
-${result.output}
-
-═══════════════════════════════════════════════════════════
-Execution completed at: ${new Date().toISOString()}
-═══════════════════════════════════════════════════════════
-`;
-        await fsPromises.writeFile(logFile, logContent);
+        const logFile = await LogFileHelper.createJobLogWithContent(
+          sanitizedPath,
+          job,
+          startTime,
+          'Code Execution',
+          result.output
+        );
         logger.info(`Execution log saved to: ${logFile}`);
 
         // Save stderr to separate error log if it exists
         const stderrContent = this.claudeRunner.capturedStderr || '';
         if (stderrContent.trim()) {
+          const logDir = path.join(sanitizedPath, '.ralph-logs');
           const errorLogFile = path.join(logDir, `job-${job.id}-stderr.log`);
           await fsPromises.writeFile(errorLogFile, stderrContent);
           logger.info(`Error output saved to: ${errorLogFile}`);

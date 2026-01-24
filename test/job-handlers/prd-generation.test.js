@@ -1,17 +1,23 @@
 const { EventEmitter } = require('events');
-const fs = require('fs');
-const fsPromises = require('fs').promises;
 const path = require('path');
 const PrdGenerationHandler = require('../../src/executor/job-handlers/prd-generation');
 
+// Mock stream that will be recreated for each test
+let mockStream = {
+  write: jest.fn(),
+  end: jest.fn()
+};
+
 // Mock fs
 jest.mock('fs', () => ({
-  existsSync: jest.fn(),
-  promises: {
-    mkdir: jest.fn(),
-    writeFile: jest.fn(),
-    appendFile: jest.fn()
-  }
+  existsSync: jest.fn()
+}));
+
+// Mock LogFileHelper
+jest.mock('../../src/utils/log-file-helper', () => ({
+  createJobLogStream: jest.fn(),
+  writeCompletionFooterToStream: jest.fn(),
+  createLogAndProgressCallbackStream: jest.fn()
 }));
 
 // Mock logger
@@ -25,21 +31,57 @@ jest.mock('../../src/logger', () => ({
 describe('PrdGenerationHandler', () => {
   let handler;
   let mockPromptValidator;
-  let mockPathValidator;
+  let mockPathHelper;
   let mockClaudeRunner;
   let mockApiClient;
+  let LogFileHelper;
+  let fs;
 
   beforeEach(() => {
+    // Create a fresh mock stream for each test
+    mockStream = {
+      write: jest.fn(),
+      end: jest.fn()
+    };
+
+    // Get LogFileHelper mock
+    LogFileHelper = require('../../src/utils/log-file-helper');
+    fs = require('fs');
+
+    // Clear all mock call history
     jest.clearAllMocks();
+
+    // Setup LogFileHelper mocks to return stream
+    LogFileHelper.createJobLogStream.mockResolvedValue({
+      logFile: '/test/.ralph-logs/job-123.log',
+      logStream: mockStream
+    });
+
+    LogFileHelper.createLogAndProgressCallbackStream.mockImplementation((stream, onProgress) => {
+      const callback = async (chunk) => {
+        stream.write(chunk);
+        if (onProgress) {
+          onProgress(chunk);
+        }
+      };
+      Object.defineProperty(callback, 'totalChunks', {
+        get: () => 0
+      });
+      return callback;
+    });
+
+    // Setup fs.existsSync mock
+    fs.existsSync.mockReturnValue(true);
 
     // Mock prompt validator
     mockPromptValidator = {
       validatePrompt: jest.fn()
     };
 
-    // Mock path validator
-    mockPathValidator = {
-      validateAndSanitizePath: jest.fn()
+    // Mock path helper
+    mockPathHelper = {
+      validateProjectPathStrict: jest.fn(),
+      validateProjectPathWithFallback: jest.fn().mockReturnValue(process.cwd())
     };
 
     // Mock Claude runner
@@ -52,16 +94,10 @@ describe('PrdGenerationHandler', () => {
       sendStatusEvent: jest.fn().mockResolvedValue(undefined)
     };
 
-    // Setup fs.promises mocks to return resolved promises
-    fsPromises.mkdir.mockResolvedValue(undefined);
-    fsPromises.writeFile.mockResolvedValue(undefined);
-    fsPromises.appendFile.mockResolvedValue(undefined);
-    fs.existsSync.mockReturnValue(true);
-
     // Create handler with mocked dependencies
     handler = new PrdGenerationHandler(
       mockPromptValidator,
-      mockPathValidator,
+      mockPathHelper,
       mockClaudeRunner,
       mockApiClient
     );
@@ -99,6 +135,7 @@ describe('PrdGenerationHandler', () => {
         prompt: 'Valid prompt'
       };
 
+      mockPathHelper.validateProjectPathWithFallback.mockReturnValue(process.cwd());
       mockClaudeRunner.runClaude.mockResolvedValue('PRD output');
 
       await handler.executeStandardPrd(job, jest.fn(), Date.now());
@@ -114,6 +151,7 @@ describe('PrdGenerationHandler', () => {
         prompt: 'Generate PRD'
       };
 
+      mockPathHelper.validateProjectPathWithFallback.mockReturnValue(process.cwd());
       mockClaudeRunner.runClaude.mockResolvedValue('PRD output');
 
       await handler.executeStandardPrd(job, jest.fn(), Date.now());
@@ -136,13 +174,16 @@ describe('PrdGenerationHandler', () => {
         }
       };
 
-      mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/path');
+      mockPathHelper.validateProjectPathWithFallback.mockReturnValue('/test/path');
       fs.existsSync.mockReturnValue(true);
       mockClaudeRunner.runClaude.mockResolvedValue('PRD output');
 
       await handler.executeStandardPrd(job, jest.fn(), Date.now());
 
-      expect(mockPathValidator.validateAndSanitizePath).toHaveBeenCalledWith('/test/path');
+      expect(mockPathHelper.validateProjectPathWithFallback).toHaveBeenCalledWith(
+        '/test/path',
+        process.cwd()
+      );
       expect(mockClaudeRunner.runClaude).toHaveBeenCalledWith(
         'Generate PRD',
         '/test/path',
@@ -161,7 +202,8 @@ describe('PrdGenerationHandler', () => {
         }
       };
 
-      mockPathValidator.validateAndSanitizePath.mockReturnValue(null);
+      // validateProjectPathWithFallback handles the fallback internally
+      mockPathHelper.validateProjectPathWithFallback.mockReturnValue(process.cwd());
       mockClaudeRunner.runClaude.mockResolvedValue('PRD output');
 
       await handler.executeStandardPrd(job, jest.fn(), Date.now());
@@ -184,8 +226,8 @@ describe('PrdGenerationHandler', () => {
         }
       };
 
-      mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/path');
-      fs.existsSync.mockReturnValue(false);
+      // validateProjectPathWithFallback handles the fallback internally
+      mockPathHelper.validateProjectPathWithFallback.mockReturnValue(process.cwd());
       mockClaudeRunner.runClaude.mockResolvedValue('PRD output');
 
       await handler.executeStandardPrd(job, jest.fn(), Date.now());
@@ -210,17 +252,11 @@ describe('PrdGenerationHandler', () => {
 
       await handler.executeStandardPrd(job, jest.fn(), startTime);
 
-      const expectedLogDir = path.join(process.cwd(), '.ralph-logs');
-      expect(fsPromises.mkdir).toHaveBeenCalledWith(expectedLogDir, { recursive: true });
-
-      const expectedLogFile = path.join(expectedLogDir, 'job-123.log');
-      expect(fsPromises.writeFile).toHaveBeenCalledWith(
-        expectedLogFile,
-        expect.stringContaining('PRD Generation Job #123')
-      );
-      expect(fsPromises.writeFile).toHaveBeenCalledWith(
-        expectedLogFile,
-        expect.stringContaining('Test PRD')
+      expect(LogFileHelper.createJobLogStream).toHaveBeenCalledWith(
+        process.cwd(),
+        job,
+        startTime,
+        'PRD Generation'
       );
     });
 
@@ -254,6 +290,19 @@ describe('PrdGenerationHandler', () => {
       const mockOnProgress = jest.fn();
       let capturedProgressCallback;
 
+      LogFileHelper.createLogAndProgressCallbackStream.mockImplementation((stream, onProgress) => {
+        const callback = async (chunk) => {
+          stream.write(chunk);
+          if (onProgress) {
+            onProgress(chunk);
+          }
+        };
+        Object.defineProperty(callback, 'totalChunks', {
+          get: () => 2
+        });
+        return callback;
+      });
+
       mockClaudeRunner.runClaude.mockImplementation((prompt, cwd, onProgress) => {
         capturedProgressCallback = onProgress;
         return Promise.resolve('PRD output');
@@ -270,14 +319,8 @@ describe('PrdGenerationHandler', () => {
 
       await promise;
 
-      expect(fsPromises.appendFile).toHaveBeenCalledWith(
-        expect.stringContaining('job-1.log'),
-        'chunk1'
-      );
-      expect(fsPromises.appendFile).toHaveBeenCalledWith(
-        expect.stringContaining('job-1.log'),
-        'chunk2'
-      );
+      expect(mockStream.write).toHaveBeenCalledWith('chunk1');
+      expect(mockStream.write).toHaveBeenCalledWith('chunk2');
       expect(mockOnProgress).toHaveBeenCalledWith('chunk1');
       expect(mockOnProgress).toHaveBeenCalledWith('chunk2');
     });
@@ -294,10 +337,10 @@ describe('PrdGenerationHandler', () => {
 
       await handler.executeStandardPrd(job, jest.fn(), Date.now());
 
-      // Check that appendFile was called with completion footer
-      const appendCalls = fsPromises.appendFile.mock.calls;
-      const lastCall = appendCalls[appendCalls.length - 1];
-      expect(lastCall[1]).toContain('PRD Generation completed at:');
+      expect(LogFileHelper.writeCompletionFooterToStream).toHaveBeenCalledWith(
+        mockStream,
+        'PRD Generation'
+      );
     });
 
     test('sends completion status event', async () => {
@@ -373,7 +416,36 @@ describe('PrdGenerationHandler', () => {
         prompt: 'Generate PRD'
       };
 
+      const logger = require('../../src/logger');
       let capturedProgressCallback;
+
+      // Mock stream that throws error on write
+      const errorStream = {
+        write: jest.fn(() => { throw new Error('Disk full'); }),
+        end: jest.fn()
+      };
+
+      LogFileHelper.createJobLogStream.mockResolvedValue({
+        logFile: '/test/.ralph-logs/job-1.log',
+        logStream: errorStream
+      });
+
+      LogFileHelper.createLogAndProgressCallbackStream.mockImplementation((stream, onProgress) => {
+        const callback = async (chunk) => {
+          try {
+            stream.write(chunk);
+          } catch (err) {
+            logger.warn(`Failed to write to log stream: ${err.message}`);
+          }
+          if (onProgress) {
+            onProgress(chunk);
+          }
+        };
+        Object.defineProperty(callback, 'totalChunks', {
+          get: () => 0
+        });
+        return callback;
+      });
 
       mockClaudeRunner.runClaude.mockImplementation((prompt, cwd, onProgress) => {
         capturedProgressCallback = onProgress;
@@ -385,21 +457,19 @@ describe('PrdGenerationHandler', () => {
       // Wait for async setup
       await new Promise(resolve => setImmediate(resolve));
 
-      // Simulate log file write error during progress
-      fsPromises.appendFile.mockRejectedValue(new Error('Disk full'));
-
-      // Trigger progress with failing appendFile
+      // Trigger progress with failing stream
       await capturedProgressCallback('chunk');
 
       // Should not throw - log errors are handled gracefully
       const result = await promise;
       expect(result.output).toBe('PRD output');
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to write to log stream'));
     });
 
     test('does not call apiClient when not provided', async () => {
       const handlerWithoutApi = new PrdGenerationHandler(
         mockPromptValidator,
-        mockPathValidator,
+        mockPathHelper,
         mockClaudeRunner,
         null
       );
@@ -469,7 +539,7 @@ describe('PrdGenerationHandler', () => {
         }
       };
 
-      mockPathValidator.validateAndSanitizePath.mockReturnValue('/test/plan/path');
+      mockPathHelper.validateProjectPathWithFallback.mockReturnValue('/test/plan/path');
       fs.existsSync.mockReturnValue(true);
       mockClaudeRunner.runClaude.mockResolvedValue('Plan output');
 
@@ -495,17 +565,11 @@ describe('PrdGenerationHandler', () => {
 
       await handler.executePlanGeneration(job, jest.fn(), startTime);
 
-      const expectedLogDir = path.join(process.cwd(), '.ralph-logs');
-      expect(fsPromises.mkdir).toHaveBeenCalledWith(expectedLogDir, { recursive: true });
-
-      const expectedLogFile = path.join(expectedLogDir, 'job-456.log');
-      expect(fsPromises.writeFile).toHaveBeenCalledWith(
-        expectedLogFile,
-        expect.stringContaining('Plan Generation Job #456')
-      );
-      expect(fsPromises.writeFile).toHaveBeenCalledWith(
-        expectedLogFile,
-        expect.stringContaining('Test Plan')
+      expect(LogFileHelper.createJobLogStream).toHaveBeenCalledWith(
+        process.cwd(),
+        job,
+        startTime,
+        'Plan Generation'
       );
     });
 
@@ -519,6 +583,19 @@ describe('PrdGenerationHandler', () => {
 
       const mockOnProgress = jest.fn();
       let capturedProgressCallback;
+
+      LogFileHelper.createLogAndProgressCallbackStream.mockImplementation((stream, onProgress) => {
+        const callback = async (chunk) => {
+          stream.write(chunk);
+          if (onProgress) {
+            onProgress(chunk);
+          }
+        };
+        Object.defineProperty(callback, 'totalChunks', {
+          get: () => 2
+        });
+        return callback;
+      });
 
       mockClaudeRunner.runClaude.mockImplementation((prompt, cwd, onProgress) => {
         capturedProgressCallback = onProgress;
@@ -536,14 +613,8 @@ describe('PrdGenerationHandler', () => {
 
       await promise;
 
-      expect(fsPromises.appendFile).toHaveBeenCalledWith(
-        expect.stringContaining('job-1.log'),
-        'plan chunk 1'
-      );
-      expect(fsPromises.appendFile).toHaveBeenCalledWith(
-        expect.stringContaining('job-1.log'),
-        'plan chunk 2'
-      );
+      expect(mockStream.write).toHaveBeenCalledWith('plan chunk 1');
+      expect(mockStream.write).toHaveBeenCalledWith('plan chunk 2');
       expect(mockOnProgress).toHaveBeenCalledWith('plan chunk 1');
       expect(mockOnProgress).toHaveBeenCalledWith('plan chunk 2');
     });
@@ -560,9 +631,10 @@ describe('PrdGenerationHandler', () => {
 
       await handler.executePlanGeneration(job, jest.fn(), Date.now());
 
-      const appendCalls = fsPromises.appendFile.mock.calls;
-      const lastCall = appendCalls[appendCalls.length - 1];
-      expect(lastCall[1]).toContain('Plan Generation completed at:');
+      expect(LogFileHelper.writeCompletionFooterToStream).toHaveBeenCalledWith(
+        mockStream,
+        'Plan Generation'
+      );
     });
 
     test('returns correct result format', async () => {
@@ -611,7 +683,36 @@ describe('PrdGenerationHandler', () => {
         prompt: 'Generate plan'
       };
 
+      const logger = require('../../src/logger');
       let capturedProgressCallback;
+
+      // Mock stream that throws error on write
+      const errorStream = {
+        write: jest.fn(() => { throw new Error('Write error'); }),
+        end: jest.fn()
+      };
+
+      LogFileHelper.createJobLogStream.mockResolvedValue({
+        logFile: '/test/.ralph-logs/job-1.log',
+        logStream: errorStream
+      });
+
+      LogFileHelper.createLogAndProgressCallbackStream.mockImplementation((stream, onProgress) => {
+        const callback = async (chunk) => {
+          try {
+            stream.write(chunk);
+          } catch (err) {
+            logger.warn(`Failed to write to log stream: ${err.message}`);
+          }
+          if (onProgress) {
+            onProgress(chunk);
+          }
+        };
+        Object.defineProperty(callback, 'totalChunks', {
+          get: () => 0
+        });
+        return callback;
+      });
 
       mockClaudeRunner.runClaude.mockImplementation((prompt, cwd, onProgress) => {
         capturedProgressCallback = onProgress;
@@ -623,14 +724,12 @@ describe('PrdGenerationHandler', () => {
       // Wait for async setup
       await new Promise(resolve => setImmediate(resolve));
 
-      // Simulate log file write error during progress
-      fsPromises.appendFile.mockRejectedValue(new Error('Write error'));
-
-      // Trigger progress with failing appendFile
+      // Trigger progress with failing stream
       await capturedProgressCallback('chunk');
 
       const result = await promise;
       expect(result.output).toBe('Plan output');
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to write to log stream'));
     });
 
     test('handles missing project path gracefully', async () => {
@@ -663,7 +762,8 @@ describe('PrdGenerationHandler', () => {
         }
       };
 
-      mockPathValidator.validateAndSanitizePath.mockReturnValue(null);
+      // validateProjectPathWithFallback handles the fallback internally
+      mockPathHelper.validateProjectPathWithFallback.mockReturnValue(process.cwd());
       mockClaudeRunner.runClaude.mockResolvedValue('Plan output');
 
       await handler.executePlanGeneration(job, jest.fn(), Date.now());
