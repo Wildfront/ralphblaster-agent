@@ -244,7 +244,7 @@ class InitCommand {
    * Handle errors with helpful messages
    */
   handleError(error) {
-    logger.error('Failed to initialize project:', error.message);
+    logger.error(`Failed to initialize project: ${error.message}`);
 
     // Provide helpful guidance based on error type
     if (error.message.includes('API token')) {
