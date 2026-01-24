@@ -665,14 +665,20 @@ ${this.capturedStderr || 'No stderr captured'}
         const chunk = data.toString();
         stdout += chunk;
 
+        // Write directly to stdout for terminal visibility
+        process.stdout.write(chunk);
+
         if (onProgress) {
           onProgress(chunk);
         }
       });
 
       claude.stderr.on('data', (data) => {
-        stderr += data.toString();
-        logger.warn('Claude stderr:', data.toString());
+        const chunk = data.toString();
+        stderr += chunk;
+
+        // Write directly to stderr for terminal visibility
+        process.stderr.write(chunk);
       });
 
       claude.on('close', (code) => {
@@ -732,11 +738,11 @@ ${this.capturedStderr || 'No stderr captured'}
       });
 
       // Use stdin to pass prompt - avoids shell injection
-      // Add --debug flag to get more detailed error information
-      logger.info('Spawning Claude CLI process with --permission-mode acceptEdits --debug');
-      const claude = spawn('claude', ['--print', '--permission-mode', 'acceptEdits', '--debug'], {
+      // Use --output-format stream-json --verbose to get structured streaming output
+      logger.info('Spawning Claude CLI process with --output-format stream-json --verbose');
+      const claude = spawn('claude', ['--print', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits'], {
         cwd: cwd,
-        shell: false,  // FIXED: Don't use shell
+        shell: false,
         env: this.getSanitizedEnv()
       });
 
@@ -766,54 +772,68 @@ ${this.capturedStderr || 'No stderr captured'}
 
       let stdout = '';
       let stderr = '';
-      let lastLogTime = Date.now();
-      const LOG_INTERVAL = 10000; // Log progress every 10 seconds
+      let finalResult = '';
+      let lineBuffer = '';
 
       claude.stdout.on('data', (data) => {
         const chunk = data.toString();
         stdout += chunk;
+        lineBuffer += chunk;
 
-        // Log Claude stdout in real-time for debugging
-        logger.info('Claude stdout:', chunk.substring(0, 1000));
+        // Process complete JSON lines
+        const lines = lineBuffer.split('\n');
+        lineBuffer = lines.pop(); // Keep incomplete line in buffer
 
-        // Log progress periodically
-        const now = Date.now();
-        if (now - lastLogTime > LOG_INTERVAL) {
-          logger.info('Claude still generating output...', {
-            outputLength: stdout.length,
-            elapsedTime: this.formatDuration(now - (Date.now() - timeout + timeout))
-          });
-          lastLogTime = now;
-        }
-
-        // Detect and emit events from stdout
-        this.detectAndEmitEvents(chunk);
-
-        // Send progress updates
-        if (onProgress) {
-          onProgress(chunk);
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          
+          try {
+            const event = JSON.parse(line);
+            this.logClaudeEvent(event);
+            
+            // Extract final result text
+            if (event.type === 'result' && event.result) {
+              finalResult = event.result;
+            }
+            
+            // Detect and emit events
+            this.detectAndEmitEvents(line);
+            
+            // Send progress updates
+            if (onProgress) {
+              onProgress(line + '\n');
+            }
+          } catch (e) {
+            // Not valid JSON, log raw
+            logger.debug(`Non-JSON output: ${line}`);
+          }
         }
       });
 
       claude.stderr.on('data', (data) => {
         const stderrChunk = data.toString();
         stderr += stderrChunk;
-
-        // Log stderr in smaller chunks for debugging
-        logger.info('Claude stderr:', stderrChunk.substring(0, 1000));
-
-        // Detect and emit events from stderr (Claude outputs a lot to stderr)
-        this.detectAndEmitEvents(stderrChunk);
-
-        // Stream stderr to progress callback for visibility
-        if (onProgress) {
-          onProgress(stderrChunk);
-        }
+        
+        // Log stderr but don't treat as JSON
+        process.stderr.write(stderrChunk);
       });
 
       claude.on('close', (code) => {
         clearTimeout(timer); // Clear timeout
         this.currentProcess = null; // Clear process reference
+
+        // Process any remaining buffered content
+        if (lineBuffer.trim()) {
+          try {
+            const event = JSON.parse(lineBuffer);
+            this.logClaudeEvent(event);
+            if (event.type === 'result' && event.result) {
+              finalResult = event.result;
+            }
+          } catch (e) {
+            // Ignore incomplete JSON
+          }
+        }
 
         logger.info(`Claude CLI process exited`, {
           exitCode: code,
@@ -823,7 +843,8 @@ ${this.capturedStderr || 'No stderr captured'}
 
         if (code === 0) {
           logger.info('Claude CLI execution completed successfully');
-          resolve(stdout);
+          // Return the extracted result text, falling back to raw stdout
+          resolve(finalResult || stdout);
         } else {
           logger.error(`Claude CLI exited with non-zero code ${code}`);
           logger.error('Last 1000 chars of stderr:', stderr.slice(-1000));
@@ -958,8 +979,8 @@ ${this.capturedStderr || 'No stderr captured'}
         const chunk = data.toString();
         output += chunk;
 
-        // Log Claude stdout in real-time for debugging
-        logger.info('Claude stdout:', chunk.substring(0, 1000));
+        // Write directly to stdout for terminal visibility (RAW output, no logger prefix)
+        process.stdout.write(chunk);
 
         // Stream progress to API in real-time (full output)
         if (this.apiClient) {
@@ -984,7 +1005,7 @@ ${this.capturedStderr || 'No stderr captured'}
         // Log locally (periodically to avoid spam)
         const now = Date.now();
         if (now - lastLogTime > LOG_INTERVAL) {
-          logger.info(`Claude still running... (${Math.floor((now - startTime) / 1000)}s elapsed)`);
+          logger.debug(`Claude still running... (${Math.floor((now - startTime) / 1000)}s elapsed)`);
           lastLogTime = now;
         }
       });
@@ -995,7 +1016,9 @@ ${this.capturedStderr || 'No stderr captured'}
         errorOutput += chunk;
         // Save to instance variable for log file
         this.capturedStderr = (this.capturedStderr || '') + chunk;
-        logger.info('Claude stderr:', chunk.substring(0, 1000));
+
+        // Write directly to stderr for terminal visibility (RAW output, no logger prefix)
+        process.stderr.write(chunk);
 
         // Detect and emit events from stderr (Claude outputs a lot to stderr)
         this.detectAndEmitEvents(chunk);
@@ -1100,6 +1123,69 @@ ${this.capturedStderr || 'No stderr captured'}
     } catch (err) {
       logger.error(`Failed to get branch name: ${err.message}`);
       return 'unknown';
+    }
+  }
+
+  /**
+   * Log Claude stream-json events to the terminal in a human-readable format
+   * @param {Object} event - Parsed JSON event from Claude CLI
+   */
+  logClaudeEvent(event) {
+    switch (event.type) {
+      case 'system':
+        if (event.subtype === 'init') {
+          logger.info(`🚀 Claude session started (model: ${event.model})`);
+        }
+        break;
+        
+      case 'assistant':
+        if (event.message?.content) {
+          for (const content of event.message.content) {
+            if (content.type === 'text' && content.text) {
+              // Log assistant text output
+              console.log(`\n💬 ${content.text}`);
+            } else if (content.type === 'tool_use') {
+              // Log tool invocation
+              const toolName = content.name;
+              const input = content.input || {};
+              let inputSummary = '';
+              
+              // Summarize common tool inputs
+              if (input.file_path || input.path) {
+                inputSummary = ` → ${path.basename(input.file_path || input.path)}`;
+              } else if (input.command) {
+                const cmd = input.command.substring(0, 60);
+                inputSummary = ` → ${cmd}${input.command.length > 60 ? '...' : ''}`;
+              } else if (input.pattern) {
+                inputSummary = ` → "${input.pattern}"`;
+              }
+              
+              console.log(`\n🔧 ${toolName}${inputSummary}`);
+            }
+          }
+        }
+        break;
+        
+      case 'user':
+        // Tool results - show brief confirmation
+        if (event.tool_use_result) {
+          const result = event.tool_use_result;
+          if (result.file) {
+            console.log(`   ✓ Read ${result.file.numLines} lines from ${path.basename(result.file.filePath)}`);
+          } else if (result.type === 'text' && result.output) {
+            const lines = result.output.split('\n').length;
+            console.log(`   ✓ Result: ${lines} lines`);
+          }
+        }
+        break;
+        
+      case 'result':
+        if (event.subtype === 'success') {
+          logger.info(`✅ Completed in ${this.formatDuration(event.duration_ms)} (${event.num_turns} turns, $${event.total_cost_usd?.toFixed(4) || '0.00'})`);
+        } else if (event.is_error) {
+          logger.error(`❌ Failed: ${event.error || 'Unknown error'}`);
+        }
+        break;
     }
   }
 
