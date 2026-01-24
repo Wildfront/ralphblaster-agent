@@ -2,19 +2,21 @@ const fs = require('fs');
 const fsPromises = require('fs').promises;
 const path = require('path');
 const logger = require('../logger');
-const WorktreeManager = require('../worktree-manager');
 const { formatDuration } = require('../utils/format');
 const { validatePrompt } = require('./prompt-validator');
 const { categorizeError } = require('./error-handler');
 const EventDetector = require('./event-detector');
 const GitHelper = require('./git-helper');
 const ClaudeRunner = require('./claude-runner');
+const PathHelper = require('./path-helper');
 const PrdGenerationHandler = require('./job-handlers/prd-generation');
 const CodeExecutionHandler = require('./job-handlers/code-execution');
 const ClarifyingQuestionsHandler = require('./job-handlers/clarifying-questions');
 
-// Timing constants
-const PROCESS_KILL_GRACE_PERIOD_MS = 2000;
+// Timeout constants
+const TIMEOUTS = {
+  PROCESS_KILL_GRACE_PERIOD_MS: 2000, // 2 seconds grace period for process termination
+};
 
 class Executor {
   constructor(apiClient = null) {
@@ -27,14 +29,15 @@ class Executor {
     this.claudeRunner = new ClaudeRunner(errorHandler, this.eventDetector, this.gitHelper);
     this.claudeRunner.setApiClient(apiClient);
 
-    // Create shared validators
+    // Create shared validators and helpers
     const promptValidator = { validatePrompt };
     const pathValidator = { validateAndSanitizePath: this.validateAndSanitizePath.bind(this) };
+    const pathHelper = new PathHelper(pathValidator);
 
     // Create PrdGenerationHandler with dependencies
     this.prdGenerationHandler = new PrdGenerationHandler(
       promptValidator,
-      pathValidator,
+      pathHelper,
       this.claudeRunner,
       apiClient
     );
@@ -42,7 +45,7 @@ class Executor {
     // Create CodeExecutionHandler with dependencies
     this.codeExecutionHandler = new CodeExecutionHandler(
       promptValidator,
-      pathValidator,
+      pathHelper,
       this.claudeRunner,
       this.gitHelper,
       apiClient
@@ -51,7 +54,7 @@ class Executor {
     // Create ClarifyingQuestionsHandler with dependencies
     this.clarifyingQuestionsHandler = new ClarifyingQuestionsHandler(
       promptValidator,
-      pathValidator,
+      pathHelper,
       this.claudeRunner,
       apiClient
     );
@@ -168,25 +171,29 @@ class Executor {
    * @returns {Promise<void>} Resolves when process is killed or grace period expires
    */
   async killCurrentProcess() {
-    if (this.currentProcess && !this.currentProcess.killed) {
+    // Capture process reference to avoid race condition where a new process
+    // is assigned to this.currentProcess between SIGTERM and SIGKILL
+    const processToKill = this.currentProcess;
+
+    if (processToKill && !processToKill.killed) {
       logger.warn('Killing current Claude process due to shutdown');
       try {
-        this.currentProcess.kill('SIGTERM');
+        processToKill.kill('SIGTERM');
 
         // Wait for grace period, then force kill if still alive
         await new Promise((resolve) => {
           setTimeout(() => {
-            // Re-check this.currentProcess in case it was cleared during grace period
-            if (this.currentProcess && !this.currentProcess.killed) {
+            // Check the captured process reference, not this.currentProcess
+            if (processToKill && !processToKill.killed) {
               logger.warn('Force killing Claude process with SIGKILL');
               try {
-                this.currentProcess.kill('SIGKILL');
+                processToKill.kill('SIGKILL');
               } catch (killError) {
                 logger.error('Error force killing process', killError.message);
               }
             }
             resolve();
-          }, PROCESS_KILL_GRACE_PERIOD_MS);
+          }, TIMEOUTS.PROCESS_KILL_GRACE_PERIOD_MS);
         });
       } catch (error) {
         logger.error('Error killing Claude process', error.message);

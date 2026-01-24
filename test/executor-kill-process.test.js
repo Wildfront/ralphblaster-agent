@@ -119,7 +119,7 @@ describe('Executor - killCurrentProcess', () => {
       expect(mockProcess.kill).toHaveBeenCalledWith('SIGTERM');
     });
 
-    test('does not send SIGKILL if currentProcess becomes null during grace period', async () => {
+    test('kills captured process even if currentProcess becomes null during grace period', async () => {
       const mockProcess = {
         kill: jest.fn(),
         killed: false
@@ -136,8 +136,39 @@ describe('Executor - killCurrentProcess', () => {
 
       await killPromise;
 
-      // Should only call kill once (SIGTERM)
-      expect(mockProcess.kill).toHaveBeenCalledTimes(1);
+      // Should call kill twice (SIGTERM and SIGKILL) on the captured process
+      // even though currentProcess was cleared
+      expect(mockProcess.kill).toHaveBeenCalledTimes(2);
+      expect(mockProcess.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(mockProcess.kill).toHaveBeenCalledWith('SIGKILL');
+    });
+
+    test('does not kill new process if currentProcess is reassigned during grace period', async () => {
+      const oldProcess = {
+        kill: jest.fn(),
+        killed: false
+      };
+
+      const newProcess = {
+        kill: jest.fn(),
+        killed: false
+      };
+
+      executor.currentProcess = oldProcess;
+
+      const killPromise = executor.killCurrentProcess();
+
+      // Simulate new process being assigned during grace period
+      executor.currentProcess = newProcess;
+
+      jest.advanceTimersByTime(2000);
+
+      await killPromise;
+
+      // Should only kill the old process, not the new one
+      expect(oldProcess.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(oldProcess.kill).toHaveBeenCalledWith('SIGKILL');
+      expect(newProcess.kill).not.toHaveBeenCalled();
     });
 
     test('uses correct grace period of 2000ms', async () => {
