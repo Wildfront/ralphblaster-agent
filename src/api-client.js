@@ -11,6 +11,7 @@ const SERVER_LONG_POLL_TIMEOUT_S = 30; // Server waits up to 30s for job
 const NETWORK_BUFFER_MS = 5000;        // 5s buffer for network latency
 const LONG_POLLING_TIMEOUT_MS = (SERVER_LONG_POLL_TIMEOUT_S * 1000) + NETWORK_BUFFER_MS; // 35s
 const REGULAR_API_TIMEOUT_MS = 15000;  // 15s for regular API calls
+const BATCH_API_TIMEOUT_MS = 30000;    // 30s for batch operations
 
 class ApiClient {
   constructor(agentId = 'agent-default') {
@@ -143,6 +144,12 @@ class ApiClient {
       return '';
     }
 
+    // Security: Reject output containing null bytes (potential injection attack)
+    if (output.includes('\0')) {
+      logger.error('Output contains null bytes - rejecting for security');
+      throw new Error('Output validation failed: null bytes detected');
+    }
+
     if (output.length > maxSize) {
       logger.warn(`Output truncated from ${output.length} to ${maxSize} bytes`);
       return output.substring(0, maxSize) + '\n\n[OUTPUT TRUNCATED - EXCEEDED MAX SIZE]';
@@ -158,7 +165,7 @@ class ApiClient {
    */
   async markJobCompleted(jobId, result) {
     try {
-      logger.info(`Building completion payload for job #${jobId}...`, {
+      logger.debug(`Building completion payload for job #${jobId}...`, {
         hasOutput: !!result.output,
         outputLength: result.output?.length || 0,
         hasPrdContent: !!result.prdContent,
@@ -177,26 +184,32 @@ class ApiClient {
 
       // Add job-type specific fields with validation
       if (result.prdContent) {
-        logger.info('Adding PRD content to payload', { length: result.prdContent.length });
+        logger.debug('Adding PRD content to payload', { length: result.prdContent.length });
         payload.prd_content = this.validateOutput(result.prdContent);
       }
       if (result.summary) {
-        logger.info('Adding summary to payload', { length: result.summary.length });
+        logger.debug('Adding summary to payload', { length: result.summary.length });
         payload.summary = this.validateOutput(result.summary, 10000); // 10KB max for summary
       }
       if (result.branchName) {
-        // Validate branch name format
-        if (!/^[a-zA-Z0-9/_-]{1,200}$/.test(result.branchName)) {
+        // Validate branch name format following git branch naming rules:
+        // - Must start with alphanumeric
+        // - Can contain alphanumeric, dash, underscore
+        // - Can contain forward slash for hierarchical names (e.g., feature/foo)
+        // - Each segment must start with alphanumeric (not dash/slash)
+        // - Max length 200 characters
+        if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*(?:\/[a-zA-Z0-9][a-zA-Z0-9_-]*)*$/.test(result.branchName) ||
+            result.branchName.length > 200) {
           logger.warn('Invalid branch name format, omitting from payload', { branchName: result.branchName });
         } else {
-          logger.info('Adding branch name to payload', { branchName: result.branchName });
+          logger.debug('Adding branch name to payload', { branchName: result.branchName });
           payload.branch_name = result.branchName;
         }
       }
 
       // Add git activity metadata
       if (result.gitActivity) {
-        logger.info('Adding git activity to payload', result.gitActivity);
+        logger.debug('Adding git activity to payload', result.gitActivity);
         payload.git_activity = {
           commit_count: result.gitActivity.commitCount || 0,
           last_commit: result.gitActivity.lastCommit || null,
@@ -206,7 +219,7 @@ class ApiClient {
         };
       }
 
-      logger.info('Sending PATCH request to mark job as completed...', {
+      logger.debug('Sending PATCH request to mark job as completed...', {
         endpoint: `/api/v1/ralph/jobs/${jobId}`,
         payloadSize: JSON.stringify(payload).length
       });
@@ -235,7 +248,7 @@ class ApiClient {
       // Support both Error objects and string messages for backward compatibility
       const errorMessage = typeof error === 'string' ? error : error.message || String(error);
 
-      logger.info('Building failure payload...', {
+      logger.debug('Building failure payload...', {
         errorMessage: errorMessage,
         errorType: typeof error,
         hasPartialOutput: !!(partialOutput || error.partialOutput),
@@ -252,22 +265,22 @@ class ApiClient {
       if (typeof error === 'object' && error !== null) {
         if (error.category) {
           payload.error_category = error.category;
-          logger.info('Error category identified', { category: error.category });
+          logger.debug('Error category identified', { category: error.category });
         }
         if (error.technicalDetails) {
           payload.error_details = error.technicalDetails;
-          logger.info('Technical details available', {
+          logger.debug('Technical details available', {
             detailsLength: error.technicalDetails.length
           });
         }
         if (error.stack) {
-          logger.info('Error stack trace (first 5 lines):', {
+          logger.debug('Error stack trace (first 5 lines):', {
             stack: error.stack.split('\n').slice(0, 5).join('\n')
           });
         }
       }
 
-      logger.info('Sending PATCH request to mark job as failed...', {
+      logger.debug('Sending PATCH request to mark job as failed...', {
         endpoint: `/api/v1/ralph/jobs/${jobId}`,
         errorCategory: payload.error_category || 'unknown',
         hasErrorDetails: !!payload.error_details
@@ -345,6 +358,24 @@ class ApiClient {
    * @param {Object} metadata - Metadata object to merge
    */
   async updateJobMetadata(jobId, metadata) {
+    // Validate metadata
+    if (!metadata || typeof metadata !== 'object') {
+      logger.warn('Invalid metadata: must be an object');
+      return;
+    }
+
+    // Check metadata size to prevent sending excessively large payloads
+    try {
+      const metadataStr = JSON.stringify(metadata);
+      if (metadataStr.length > 10000) {
+        logger.warn(`Metadata too large (${metadataStr.length} bytes), truncating`);
+        return;
+      }
+    } catch (error) {
+      logger.warn(`Error serializing metadata: ${error.message}`);
+      return;
+    }
+
     try {
       await this.client.patch(`/api/v1/ralph/jobs/${jobId}/metadata`, {
         metadata: metadata
@@ -398,6 +429,8 @@ class ApiClient {
     try {
       await this.client.post(`/api/v1/ralph/jobs/${jobId}/setup_logs`, {
         logs: logs
+      }, {
+        timeout: BATCH_API_TIMEOUT_MS // 30s for batch operations
       });
       logger.debug(`Batch setup logs sent for job #${jobId}: ${logs.length} logs`);
     } catch (error) {
