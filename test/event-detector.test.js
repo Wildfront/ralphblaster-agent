@@ -1,9 +1,3 @@
-jest.mock('../src/config', () => ({
-  apiUrl: 'https://test-api.com',
-  apiToken: 'test-token',
-  maxRetries: 3,
-  logLevel: 'info'
-}));
 jest.mock('../src/logger', () => ({
   info: jest.fn(),
   debug: jest.fn(),
@@ -11,10 +5,10 @@ jest.mock('../src/logger', () => ({
   error: jest.fn()
 }));
 
-const Executor = require('../src/executor');
+const EventDetector = require('../src/executor/event-detector');
 
-describe('Executor - detectAndEmitEvents', () => {
-  let executor;
+describe('EventDetector', () => {
+  let eventDetector;
   let mockApiClient;
 
   beforeEach(() => {
@@ -22,15 +16,14 @@ describe('Executor - detectAndEmitEvents', () => {
     mockApiClient = {
       sendStatusEvent: jest.fn().mockResolvedValue({})
     };
-    executor = new Executor(mockApiClient);
-    executor.currentJobId = 123;
+    eventDetector = new EventDetector();
   });
 
   describe('file modification detection', () => {
     test('detects "Writing to" pattern', () => {
       const chunk = 'Writing to src/app.js';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -43,7 +36,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "Created file" pattern', () => {
       const chunk = 'Created file test/new-test.js';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -56,7 +49,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "Modified file" pattern', () => {
       const chunk = 'Modified file config/database.yml';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -69,7 +62,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "Editing" pattern', () => {
       const chunk = 'Editing lib/utils.rb';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -82,7 +75,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "Successfully created" pattern', () => {
       const chunk = 'Successfully created app/models/user.rb';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -95,7 +88,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "Successfully modified" pattern', () => {
       const chunk = 'Successfully modified config/routes.rb';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalled();
     });
@@ -103,7 +96,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "Successfully updated" pattern', () => {
       const chunk = 'Successfully updated README.md';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalled();
     });
@@ -111,7 +104,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "File X created" pattern', () => {
       const chunk = 'File package.json created successfully';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalled();
     });
@@ -119,7 +112,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "File X modified" pattern', () => {
       const chunk = 'File index.html modified';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalled();
     });
@@ -127,7 +120,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('strips quotes from filename', () => {
       const chunk = 'Writing to `src/main.js`';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -140,7 +133,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('strips single quotes from filename', () => {
       const chunk = "Created file 'test/spec.js'";
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -153,7 +146,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('strips double quotes from filename', () => {
       const chunk = 'Modified file "config/app.yml"';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalled();
     });
@@ -161,7 +154,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('ignores filenames with ellipsis', () => {
       const chunk = 'Writing to src/...';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).not.toHaveBeenCalled();
     });
@@ -171,7 +164,7 @@ describe('Executor - detectAndEmitEvents', () => {
                      Writing to file2.js
                      Writing to file3.js`;
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       // Should only emit once
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledTimes(1);
@@ -182,7 +175,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "git commit" pattern', () => {
       const chunk = 'Running git commit -m "Add feature"';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -194,7 +187,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "committed changes" pattern', () => {
       const chunk = 'Successfully committed changes';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -206,7 +199,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "Created commit" pattern', () => {
       const chunk = 'Created commit abc1234';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -218,7 +211,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('is case insensitive for git commit', () => {
       const chunk = 'GIT COMMIT completed';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -232,7 +225,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "Running tests" pattern', () => {
       const chunk = 'Running tests...';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -244,7 +237,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "running test" pattern', () => {
       const chunk = 'Now running test suite';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -256,7 +249,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "bin/rails test" pattern', () => {
       const chunk = 'Executing bin/rails test';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -268,7 +261,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "npm test" pattern', () => {
       const chunk = 'Running npm test';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -280,7 +273,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "pytest" pattern', () => {
       const chunk = 'Executing pytest tests/';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -294,7 +287,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "cleanup" pattern', () => {
       const chunk = 'Starting cleanup process';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -306,7 +299,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "cleaning up" pattern', () => {
       const chunk = 'Now cleaning up temporary files';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -318,7 +311,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('detects "removing temporary" pattern', () => {
       const chunk = 'Removing temporary directory';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalledWith(
         123,
@@ -330,20 +323,18 @@ describe('Executor - detectAndEmitEvents', () => {
 
   describe('edge cases', () => {
     test('does not emit when no apiClient', () => {
-      executor.apiClient = null;
       const chunk = 'Writing to file.js';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, null);
 
       // Should not throw, just return early
-      expect(() => executor.detectAndEmitEvents(chunk)).not.toThrow();
+      expect(() => eventDetector.detectAndEmit(chunk, 123, null)).not.toThrow();
     });
 
-    test('does not emit when no currentJobId', () => {
-      executor.currentJobId = null;
+    test('does not emit when no jobId', () => {
       const chunk = 'Writing to file.js';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, null, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).not.toHaveBeenCalled();
     });
@@ -354,7 +345,7 @@ describe('Executor - detectAndEmitEvents', () => {
 
       const chunk = 'Writing to file.js';
 
-      expect(() => executor.detectAndEmitEvents(chunk)).not.toThrow();
+      expect(() => eventDetector.detectAndEmit(chunk, 123, mockApiClient)).not.toThrow();
 
       // Wait for the promise to be handled
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -366,7 +357,7 @@ describe('Executor - detectAndEmitEvents', () => {
     test('handles empty chunk', () => {
       const chunk = '';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).not.toHaveBeenCalled();
     });
@@ -374,18 +365,18 @@ describe('Executor - detectAndEmitEvents', () => {
     test('handles chunk with no matching patterns', () => {
       const chunk = 'Some random output that does not match';
 
-      executor.detectAndEmitEvents(chunk);
+      eventDetector.detectAndEmit(chunk, 123, mockApiClient);
 
       expect(mockApiClient.sendStatusEvent).not.toHaveBeenCalled();
     });
 
     test('is case insensitive for all patterns', () => {
-      executor.detectAndEmitEvents('RUNNING TESTS...');
+      eventDetector.detectAndEmit('RUNNING TESTS...', 123, mockApiClient);
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalled();
 
       mockApiClient.sendStatusEvent.mockClear();
 
-      executor.detectAndEmitEvents('CLEANUP started');
+      eventDetector.detectAndEmit('CLEANUP started', 123, mockApiClient);
       expect(mockApiClient.sendStatusEvent).toHaveBeenCalled();
     });
   });

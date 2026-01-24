@@ -1,9 +1,3 @@
-jest.mock('../src/config', () => ({
-  apiUrl: 'https://test-api.com',
-  apiToken: 'test-token',
-  maxRetries: 3,
-  logLevel: 'info'
-}));
 jest.mock('../src/logger', () => ({
   info: jest.fn(),
   debug: jest.fn(),
@@ -13,7 +7,7 @@ jest.mock('../src/logger', () => ({
 
 const { categorizeError } = require('../src/executor/error-handler');
 
-describe('Executor - Error Categorization', () => {
+describe('Error Handler', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });

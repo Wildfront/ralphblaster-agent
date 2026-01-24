@@ -67,7 +67,7 @@ describe('Executor - Plan Generation', () => {
       spawn.mockReturnValue(mockProcess);
 
       const startTime = Date.now();
-      const planPromise = executor.executePlanGeneration(job, jest.fn(), startTime);
+      const planPromise = executor.executePrdGeneration(job, jest.fn(), startTime);
 
       // Add minimal delay to ensure executionTimeMs > 0
       setTimeout(() => {
@@ -102,7 +102,7 @@ describe('Executor - Plan Generation', () => {
 
       spawn.mockReturnValue(mockProcess);
 
-      const planPromise = executor.executePlanGeneration(job, jest.fn(), Date.now());
+      const planPromise = executor.executePrdGeneration(job, jest.fn(), Date.now());
 
       // Wait for async operations to complete before emitting events
       setTimeout(() => {
@@ -133,7 +133,7 @@ describe('Executor - Plan Generation', () => {
 
       spawn.mockReturnValue(mockProcess);
 
-      const planPromise = executor.executePlanGeneration(job, jest.fn(), Date.now());
+      const planPromise = executor.executePrdGeneration(job, jest.fn(), Date.now());
 
       const planContent = `
 ## Plan for Feature X
@@ -175,7 +175,7 @@ describe('Executor - Plan Generation', () => {
       spawn.mockReturnValue(mockProcess);
 
       const startTime = Date.now();
-      const planPromise = executor.executePlanGeneration(job, jest.fn(), startTime);
+      const planPromise = executor.executePrdGeneration(job, jest.fn(), startTime);
 
       // Simulate delay
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -208,7 +208,7 @@ describe('Executor - Plan Generation', () => {
 
       spawn.mockReturnValue(mockProcess);
 
-      const planPromise = executor.executePlanGeneration(job, jest.fn(), Date.now());
+      const planPromise = executor.executePrdGeneration(job, jest.fn(), Date.now());
 
       // Wait for async operations to complete before emitting events
       setTimeout(() => {
@@ -240,7 +240,7 @@ describe('Executor - Plan Generation', () => {
 
       spawn.mockReturnValue(mockProcess);
 
-      const planPromise = executor.executePlanGeneration(job, jest.fn(), Date.now());
+      const planPromise = executor.executePrdGeneration(job, jest.fn(), Date.now());
 
       // Wait for async operations to complete before checking spawn
       setTimeout(() => {
@@ -281,7 +281,7 @@ describe('Executor - Plan Generation', () => {
 
       spawn.mockReturnValue(mockProcess);
 
-      const planPromise = executor.executePlanGeneration(job, jest.fn(), Date.now());
+      const planPromise = executor.executePrdGeneration(job, jest.fn(), Date.now());
 
       // Wait for async operations to complete before checking spawn
       setTimeout(() => {
