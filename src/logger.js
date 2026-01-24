@@ -236,32 +236,21 @@ function log(level, message, data = null) {
     const shouldUseColors = config.consoleColors !== false;
     const shouldUsePrettyFormat = config.consoleFormat === 'pretty';
 
-    if (hasData) {
-      // Redact data
-      const redactedData = redactSensitiveData(enrichedData);
-
-      if (shouldUsePrettyFormat) {
-        // Use human-readable formatting
-        const consoleData = formatConsoleData(redactedData);
-
-        // Apply color coding
-        if (shouldUseColors) {
-          const levelColor = LEVEL_COLORS[level] || '';
-          const coloredMessage = levelColor + safeMessage + COLORS.reset;
-          console.log(prefix, coloredMessage + consoleData);
-        } else {
-          console.log(prefix, safeMessage + consoleData);
-        }
-      } else {
-        // Use original JSON format
-        console.log(prefix, safeMessage, safeStringify(redactedData));
-      }
-    } else {
-      // No data - just apply color to message
-      if (shouldUseColors && shouldUsePrettyFormat) {
+    if (shouldUsePrettyFormat) {
+      // Pretty format: Only show message, no data - keeps console clean
+      // API still receives full enriched data below
+      if (shouldUseColors) {
         const levelColor = LEVEL_COLORS[level] || '';
         const coloredMessage = levelColor + safeMessage + COLORS.reset;
         console.log(prefix, coloredMessage);
+      } else {
+        console.log(prefix, safeMessage);
+      }
+    } else {
+      // Non-pretty format: Show full enriched data for debugging
+      if (hasData) {
+        const redactedEnrichedData = redactSensitiveData(enrichedData);
+        console.log(prefix, safeMessage, safeStringify(redactedEnrichedData));
       } else {
         console.log(prefix, safeMessage);
       }
