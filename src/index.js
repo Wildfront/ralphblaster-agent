@@ -2,6 +2,7 @@ const ApiClient = require('./api-client');
 const Executor = require('./executor');
 const config = require('./config');
 const logger = require('./logger');
+const { formatDuration } = require('./utils/format');
 
 // Timing constants
 const SHUTDOWN_DELAY_MS = 500;
@@ -199,13 +200,13 @@ class RalphAgent {
       logger.info('═══════════════════════════════════════════════════════════');
       logger.info(`✓ Job #${job.id} completed successfully`, {
         executionTimeMs: executionTime,
-        executionTime: this.formatDuration(executionTime)
+        executionTime: formatDuration(executionTime)
       });
       logger.info('═══════════════════════════════════════════════════════════');
     } catch (error) {
       const executionTime = Date.now() - this.jobStartTime;
       logger.error('═══════════════════════════════════════════════════════════');
-      logger.error(`✗ Job #${job.id} failed after ${this.formatDuration(executionTime)}`, {
+      logger.error(`✗ Job #${job.id} failed after ${formatDuration(executionTime)}`, {
         error: error.message,
         category: error.category,
         hasPartialOutput: !!error.partialOutput
@@ -238,18 +239,6 @@ class RalphAgent {
     }
   }
 
-  /**
-   * Format duration in human-readable form
-   * @param {number} ms - Duration in milliseconds
-   * @returns {string} Formatted duration
-   */
-  formatDuration(ms) {
-    if (ms < 1000) return `${ms}ms`;
-    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-    const minutes = Math.floor(ms / 60000);
-    const seconds = Math.floor((ms % 60000) / 1000);
-    return `${minutes}m ${seconds}s`;
-  }
 
   /**
    * Start heartbeat for job

@@ -1,5 +1,6 @@
 const config = require('./config');
 const SetupLogBatcher = require('./setup-log-batcher');
+const { formatDuration } = require('./utils/format');
 
 const LOG_LEVELS = {
   error: 0,
@@ -140,18 +141,6 @@ function formatMessage(message, data = null, includeMetadata = true) {
   return message;
 }
 
-/**
- * Format duration in human-readable form
- * @param {number} ms - Duration in milliseconds
- * @returns {string} Formatted duration
- */
-function formatDuration(ms) {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  const minutes = Math.floor(ms / 60000);
-  const seconds = Math.floor((ms % 60000) / 1000);
-  return `${minutes}m ${seconds}s`;
-}
 
 function log(level, message, data = null) {
   if (LOG_LEVELS[level] <= currentLevel) {

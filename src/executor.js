@@ -4,6 +4,7 @@ const fsPromises = require('fs').promises;
 const path = require('path');
 const logger = require('./logger');
 const WorktreeManager = require('./worktree-manager');
+const { formatDuration } = require('./utils/format');
 
 // Timing constants
 const PROCESS_KILL_GRACE_PERIOD_MS = 2000;
@@ -221,7 +222,7 @@ PRD Generation completed at: ${new Date().toISOString()}
       const executionTimeMs = Date.now() - startTime;
       logger.info('PRD generation successful', {
         executionTimeMs,
-        executionTimeFormatted: this.formatDuration(executionTimeMs)
+        executionTimeFormatted: formatDuration(executionTimeMs)
       });
 
       return {
@@ -251,18 +252,6 @@ PRD Generation completed at: ${new Date().toISOString()}
     }
   }
 
-  /**
-   * Format duration in human-readable form
-   * @param {number} ms - Duration in milliseconds
-   * @returns {string} Formatted duration
-   */
-  formatDuration(ms) {
-    if (ms < 1000) return `${ms}ms`;
-    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-    const minutes = Math.floor(ms / 60000);
-    const seconds = Math.floor((ms % 60000) / 1000);
-    return `${minutes}m ${seconds}s`;
-  }
 
   /**
    * Execute plan generation using Claude Code planning mode
@@ -635,7 +624,7 @@ ${this.capturedStderr || 'No stderr captured'}
    */
   runClaude(prompt, cwd, onProgress, timeout = 7200000) {
     return new Promise((resolve, reject) => {
-      const timeoutFormatted = this.formatDuration(timeout);
+      const timeoutFormatted = formatDuration(timeout);
       logger.info(`Starting Claude CLI execution`, {
         timeout: timeoutFormatted,
         workingDirectory: cwd,
@@ -813,7 +802,7 @@ ${this.capturedStderr || 'No stderr captured'}
     const timeout = 7200000; // 2 hours (same as current runClaude)
 
     logger.info(`Running Claude Code in worktree: ${worktreePath}`, {
-      timeout: this.formatDuration(timeout),
+      timeout: formatDuration(timeout),
       workingDirectory: worktreePath,
       promptLength: prompt.length
     });
@@ -956,7 +945,7 @@ ${this.capturedStderr || 'No stderr captured'}
         }
 
         if (code === 0) {
-          logger.info(`Claude completed successfully in ${this.formatDuration(duration)}`);
+          logger.info(`Claude completed successfully in ${formatDuration(duration)}`);
 
           // Get branch name from worktree
           const branchName = await this.getCurrentBranch(worktreePath);
@@ -1063,7 +1052,7 @@ ${this.capturedStderr || 'No stderr captured'}
           for (const content of event.message.content) {
             if (content.type === 'text' && content.text) {
               // Log assistant text output
-              console.log(`\n💬 ${content.text}`);
+              logger.info(`💬 ${content.text}`);
             } else if (content.type === 'tool_use') {
               // Log tool invocation
               const toolName = content.name;
@@ -1079,8 +1068,8 @@ ${this.capturedStderr || 'No stderr captured'}
               } else if (input.pattern) {
                 inputSummary = ` → "${input.pattern}"`;
               }
-              
-              console.log(`\n🔧 ${toolName}${inputSummary}`);
+
+              logger.info(`🔧 ${toolName}${inputSummary}`);
             }
           }
         }
@@ -1091,17 +1080,17 @@ ${this.capturedStderr || 'No stderr captured'}
         if (event.tool_use_result) {
           const result = event.tool_use_result;
           if (result.file) {
-            console.log(`   ✓ Read ${result.file.numLines} lines from ${path.basename(result.file.filePath)}`);
+            logger.debug(`Read ${result.file.numLines} lines from ${path.basename(result.file.filePath)}`);
           } else if (result.type === 'text' && result.output) {
             const lines = result.output.split('\n').length;
-            console.log(`   ✓ Result: ${lines} lines`);
+            logger.debug(`Result: ${lines} lines`);
           }
         }
         break;
         
       case 'result':
         if (event.subtype === 'success') {
-          logger.info(`✅ Completed in ${this.formatDuration(event.duration_ms)} (${event.num_turns} turns, $${event.total_cost_usd?.toFixed(4) || '0.00'})`);
+          logger.info(`✅ Completed in ${formatDuration(event.duration_ms)} (${event.num_turns} turns, $${event.total_cost_usd?.toFixed(4) || '0.00'})`);
         } else if (event.is_error) {
           logger.error(`❌ Failed: ${event.error || 'Unknown error'}`);
         }

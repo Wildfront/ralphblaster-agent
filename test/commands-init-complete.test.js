@@ -577,8 +577,7 @@ describe('InitCommand - Complete Coverage', () => {
       initCommand.handleError(error);
 
       expect(logger.error).toHaveBeenCalledWith(
-        'Failed to initialize project:',
-        'Test error'
+        'Failed to initialize project: Test error'
       );
     });
 
