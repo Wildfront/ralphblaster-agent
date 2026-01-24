@@ -3,6 +3,11 @@ const path = require('path');
 const logger = require('../logger');
 const { formatDuration } = require('../utils/format');
 
+// Timeout constants
+const TIMEOUTS = {
+  CLAUDE_EXECUTION_MS: 7200000, // 2 hours for Claude CLI execution
+};
+
 /**
  * ClaudeRunner - Handles Claude CLI execution
  *
@@ -103,7 +108,7 @@ class ClaudeRunner {
    * @param {number} timeout - Timeout in milliseconds (default: 2 hours for code execution)
    * @returns {Promise<string>} Command output
    */
-  runClaude(prompt, cwd, onProgress, timeout = 7200000) {
+  runClaude(prompt, cwd, onProgress, timeout = TIMEOUTS.CLAUDE_EXECUTION_MS) {
     return new Promise((resolve, reject) => {
       const timeoutFormatted = formatDuration(timeout);
       logger.info(`Starting Claude CLI execution`, {
@@ -198,6 +203,8 @@ class ClaudeRunner {
       claude.stderr.on('data', (data) => {
         const stderrChunk = data.toString();
         stderr += stderrChunk;
+        // Save to instance variable for log file
+        this.capturedStderr = (this.capturedStderr || '') + stderrChunk;
 
         // Log stderr but don't treat as JSON
         process.stderr.write(stderrChunk);
@@ -302,7 +309,7 @@ class ClaudeRunner {
    */
   async runClaudeDirectly(worktreePath, prompt, job, onProgress) {
     const startTime = Date.now();
-    const timeout = 7200000; // 2 hours (same as current runClaude)
+    const timeout = TIMEOUTS.CLAUDE_EXECUTION_MS;
 
     logger.info(`Running Claude Code in worktree: ${worktreePath}`, {
       timeout: formatDuration(timeout),

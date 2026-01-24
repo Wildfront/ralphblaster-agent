@@ -3,6 +3,12 @@ const path = require('path');
 const fs = require('fs').promises;
 const logger = require('./logger');
 
+// Timeout constants
+const TIMEOUTS = {
+  GIT_COMMAND_MS: 30000, // 30 seconds for git operations
+  WORKTREE_CLEANUP_DELAY_MS: 500, // Wait after worktree removal for filesystem consistency
+};
+
 /**
  * WorktreeManager - Manages git worktrees for parallel job execution
  *
@@ -45,7 +51,7 @@ class WorktreeManager {
           logger.warn(`Worktree already exists at ${worktreePath}, removing stale worktree (attempt ${attempt}/${maxRetries})`)
           await this.removeWorktree(job)
           // Wait a bit after removal to ensure filesystem consistency
-          await this.sleep(500)
+          await this.sleep(TIMEOUTS.WORKTREE_CLEANUP_DELAY_MS)
         } catch (err) {
           // Worktree doesn't exist, which is expected
         }
@@ -55,7 +61,7 @@ class WorktreeManager {
         await this.execGit(
           systemPath,
           ['worktree', 'add', '-b', branchName, worktreePath, 'HEAD'],
-          30000
+          TIMEOUTS.GIT_COMMAND_MS
         )
 
         // Phase 3: Use event for structured logging
@@ -130,7 +136,7 @@ class WorktreeManager {
       await this.execGit(
         systemPath,
         ['worktree', 'remove', worktreePath, '--force'],
-        30000
+        TIMEOUTS.GIT_COMMAND_MS
       )
 
       // Phase 3: Use event for structured logging
@@ -182,7 +188,7 @@ class WorktreeManager {
    * @param {number} timeout - Timeout in milliseconds (default: 30s)
    * @returns {Promise<{stdout: string, stderr: string}>}
    */
-  async execGit(cwd, args, timeout = 30000) {
+  async execGit(cwd, args, timeout = TIMEOUTS.GIT_COMMAND_MS) {
     return new Promise((resolve, reject) => {
       const process = spawn('git', args, {
         cwd,

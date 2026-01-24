@@ -172,18 +172,19 @@ class InitCommand {
   displaySuccess(project, tokenSaved = false) {
     const iconEmoji = this.getIconEmoji(project.icon);
 
-    console.log('\n✓ Project initialized successfully!\n');
-    console.log(`  Name:  ${project.name}`);
-    console.log(`  Path:  ${project.system_path}`);
-    console.log(`  Icon:  ${iconEmoji}`);
-    console.log(`  Color: ${this.formatColorName(project.color)}\n`);
+    logger.info('Project initialized successfully!', {
+      name: project.name,
+      path: project.system_path,
+      icon: iconEmoji,
+      color: this.formatColorName(project.color)
+    });
 
     if (tokenSaved) {
-      console.log('✓ API token saved to ~/.ralphblasterrc\n');
-      console.log('You can now run "ralphblaster" without passing the token.\n');
+      logger.info('API token saved to ~/.ralphblasterrc');
+      logger.info('You can now run "ralphblaster" without passing the token.');
     }
 
-    console.log('You can now create tasks for this project in RalphBlaster.\n');
+    logger.info('You can now create tasks for this project in RalphBlaster.');
   }
 
   /**

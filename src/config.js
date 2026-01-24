@@ -24,10 +24,10 @@ const config = {
 
 // Validate required configuration
 if (!config.apiToken) {
-  console.error('Error: RALPH_API_TOKEN environment variable is required');
-  console.error('\nRun "ralphblaster init --token=YOUR_TOKEN" to save your token,');
-  console.error('or set the RALPH_API_TOKEN environment variable.');
-  process.exit(1);
+  const errorMessage = 'RALPH_API_TOKEN environment variable is required\n' +
+    '\nRun "ralphblaster init --token=YOUR_TOKEN" to save your token,\n' +
+    'or set the RALPH_API_TOKEN environment variable.';
+  throw new Error(errorMessage);
 }
 
 module.exports = config;

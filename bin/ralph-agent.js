@@ -197,8 +197,16 @@ if (agentCount && agentCount > 1) {
 
 // Single agent mode (default)
 // Load modules AFTER environment variables are set
-const RalphAgent = require('../src/index');
-const logger = require('../src/logger');
+// Wrap in try-catch to handle config errors gracefully
+let RalphAgent, logger;
+try {
+  RalphAgent = require('../src/index');
+  logger = require('../src/logger');
+} catch (error) {
+  // Handle config errors (e.g., missing API token)
+  console.error('Error: ' + error.message);
+  process.exit(1);
+}
 
 // Start the agent
 const agent = new RalphAgent();
