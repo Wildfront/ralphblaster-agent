@@ -71,7 +71,8 @@
       "Bash(tree:*)",
       "Bash(if [ -f /Users/macmartine/src/ralph-agent/src/executor.js.backup ])",
       "Bash(then wc -l /Users/macmartine/src/ralph-agent/src/executor.js.backup)",
-      "Bash(else echo \"Backup not found, calculating from git\")"
+      "Bash(else echo \"Backup not found, calculating from git\")",
+      "Bash(npm ls:*)"
     ]
   }
 }
