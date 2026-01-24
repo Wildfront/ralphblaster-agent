@@ -1,19 +1,11 @@
 const { spawn } = require('child_process');
 const { EventEmitter } = require('events');
 const fs = require('fs');
-const fsPromises = require('fs').promises;
 const Executor = require('../src/executor');
 
 jest.mock('child_process');
 jest.mock('fs', () => ({
-  existsSync: jest.fn(),
-  promises: {
-    mkdir: jest.fn(),
-    writeFile: jest.fn(),
-    appendFile: jest.fn(),
-    copyFile: jest.fn(),
-    access: jest.fn()
-  }
+  existsSync: jest.fn()
 }));
 jest.mock('../src/config', () => ({
   apiUrl: 'https://test-api.com',
@@ -27,19 +19,48 @@ jest.mock('../src/logger', () => ({
   warn: jest.fn(),
   error: jest.fn()
 }));
+jest.mock('../src/utils/log-file-helper', () => ({
+  createJobLogStream: jest.fn(),
+  writeCompletionFooterToStream: jest.fn(),
+  createLogAndProgressCallbackStream: jest.fn()
+}));
 
 describe('Executor - Plan Generation', () => {
   let executor;
+  let LogFileHelper;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    executor = new Executor();
 
-    // Setup fs.promises mocks to return resolved promises
-    fsPromises.mkdir.mockResolvedValue(undefined);
-    fsPromises.writeFile.mockResolvedValue(undefined);
-    fsPromises.appendFile.mockResolvedValue(undefined);
+    // Get LogFileHelper mock
+    LogFileHelper = require('../src/utils/log-file-helper');
+
+    // Setup LogFileHelper mocks
+    const mockStream = {
+      write: jest.fn(),
+      end: jest.fn()
+    };
+
+    LogFileHelper.createJobLogStream.mockResolvedValue({
+      logFile: '/test/.ralph-logs/job-1.log',
+      logStream: mockStream
+    });
+
+    LogFileHelper.createLogAndProgressCallbackStream.mockImplementation((stream, onProgress) => {
+      const callback = async (chunk) => {
+        stream.write(chunk);
+        if (onProgress) {
+          onProgress(chunk);
+        }
+      };
+      Object.defineProperty(callback, 'totalChunks', {
+        get: () => 0
+      });
+      return callback;
+    });
+
     fs.existsSync.mockReturnValue(true);
+    executor = new Executor();
   });
 
   describe('executePlanGeneration()', () => {

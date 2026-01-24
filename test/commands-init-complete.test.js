@@ -446,6 +446,7 @@ describe('InitCommand - Complete Coverage', () => {
 
   describe('displaySuccess()', () => {
     test('displays success message with project details', () => {
+      const logger = require('../src/logger');
       const project = {
         name: 'My Project',
         system_path: '/path/to/project',
@@ -455,15 +456,19 @@ describe('InitCommand - Complete Coverage', () => {
 
       initCommand.displaySuccess(project);
 
-      expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('Project initialized successfully')
-      );
-      expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('My Project')
+      expect(logger.info).toHaveBeenCalledWith(
+        'Project initialized successfully!',
+        {
+          name: 'My Project',
+          path: '/path/to/project',
+          icon: '🚀',
+          color: 'Blue'
+        }
       );
     });
 
     test('formats icon emoji correctly', () => {
+      const logger = require('../src/logger');
       const project = {
         name: 'Test',
         system_path: '/test',
@@ -473,12 +478,16 @@ describe('InitCommand - Complete Coverage', () => {
 
       initCommand.displaySuccess(project);
 
-      expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('🚀')
+      expect(logger.info).toHaveBeenCalledWith(
+        'Project initialized successfully!',
+        expect.objectContaining({
+          icon: '🚀'
+        })
       );
     });
 
     test('formats color name correctly', () => {
+      const logger = require('../src/logger');
       const project = {
         name: 'Test',
         system_path: '/test',
@@ -488,8 +497,11 @@ describe('InitCommand - Complete Coverage', () => {
 
       initCommand.displaySuccess(project);
 
-      expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('Light Blue')
+      expect(logger.info).toHaveBeenCalledWith(
+        'Project initialized successfully!',
+        expect.objectContaining({
+          color: 'Light Blue'
+        })
       );
     });
   });

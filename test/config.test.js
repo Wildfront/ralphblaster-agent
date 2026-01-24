@@ -12,16 +12,10 @@ jest.mock('../src/config-file-manager', () => {
 
 describe('Config', () => {
   let originalEnv;
-  let consoleErrorSpy;
-  let processExitSpy;
 
   beforeEach(() => {
     // Save original environment
     originalEnv = { ...process.env };
-
-    // Spy on console.error and process.exit
-    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-    processExitSpy = jest.spyOn(process, 'exit').mockImplementation();
 
     // Clear module cache to allow re-requiring with different env
     jest.resetModules();
@@ -30,30 +24,23 @@ describe('Config', () => {
   afterEach(() => {
     // Restore original environment
     process.env = originalEnv;
-
-    // Restore spies
-    consoleErrorSpy.mockRestore();
-    processExitSpy.mockRestore();
   });
 
   describe('API Token validation', () => {
-    test('exits when RALPH_API_TOKEN is missing', () => {
+    test('throws error when RALPH_API_TOKEN is missing', () => {
       delete process.env.RALPH_API_TOKEN;
 
-      require('../src/config');
-
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Error: RALPH_API_TOKEN environment variable is required'
-      );
-      expect(processExitSpy).toHaveBeenCalledWith(1);
+      expect(() => {
+        require('../src/config');
+      }).toThrow('RALPH_API_TOKEN environment variable is required');
     });
 
-    test('exits when RALPH_API_TOKEN is empty string', () => {
+    test('throws error when RALPH_API_TOKEN is empty string', () => {
       process.env.RALPH_API_TOKEN = '';
 
-      require('../src/config');
-
-      expect(processExitSpy).toHaveBeenCalledWith(1);
+      expect(() => {
+        require('../src/config');
+      }).toThrow('RALPH_API_TOKEN environment variable is required');
     });
 
     test('accepts valid RALPH_API_TOKEN', () => {
@@ -61,7 +48,6 @@ describe('Config', () => {
 
       const config = require('../src/config');
 
-      expect(processExitSpy).not.toHaveBeenCalled();
       expect(config.apiToken).toBe('valid-token-123');
     });
   });

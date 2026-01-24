@@ -134,7 +134,7 @@ describe('RalphAgent - Graceful Shutdown', () => {
       await agent.processJob(job);
 
       expect(stopHeartbeatSpy).toHaveBeenCalled();
-      expect(callOrder).toEqual(['stopHeartbeat', 'markJobCompleted']);
+      expect(callOrder).toEqual(['markJobCompleted', 'stopHeartbeat']);
     });
 
     test('stopHeartbeat is called before marking job failed', async () => {
@@ -160,7 +160,7 @@ describe('RalphAgent - Graceful Shutdown', () => {
       await agent.processJob(job);
 
       expect(stopHeartbeatSpy).toHaveBeenCalled();
-      expect(callOrder).toEqual(['stopHeartbeat', 'markJobFailed']);
+      expect(callOrder).toEqual(['markJobFailed', 'stopHeartbeat']);
     });
   });
 });

@@ -10,6 +10,7 @@ jest.mock('child_process');
 // Mock fs
 jest.mock('fs', () => ({
   existsSync: jest.fn(),
+  createWriteStream: jest.fn(),
   promises: {
     mkdir: jest.fn(),
     writeFile: jest.fn(),
@@ -46,6 +47,13 @@ describe('Executor - Job Execution', () => {
     fsPromises.mkdir.mockResolvedValue(undefined);
     fsPromises.writeFile.mockResolvedValue(undefined);
     fsPromises.appendFile.mockResolvedValue(undefined);
+
+    // Setup fs.createWriteStream mock to return a mock stream
+    const mockStream = {
+      write: jest.fn(),
+      end: jest.fn()
+    };
+    fs.createWriteStream.mockReturnValue(mockStream);
   });
 
   describe('execute()', () => {
