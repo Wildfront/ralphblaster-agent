@@ -15,7 +15,11 @@ const config = {
   maxRetries: parseInt(process.env.RALPH_MAX_RETRIES || '3', 10),
 
   // Logging
-  logLevel: process.env.RALPH_LOG_LEVEL || 'info'
+  logLevel: process.env.RALPH_LOG_LEVEL || 'info',
+
+  // Console formatting
+  consoleColors: process.env.RALPH_CONSOLE_COLORS !== 'false', // Default true
+  consoleFormat: process.env.RALPH_CONSOLE_FORMAT || 'pretty'  // 'pretty' or 'json'
 };
 
 // Validate required configuration

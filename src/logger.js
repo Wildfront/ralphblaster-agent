@@ -2,6 +2,26 @@ const config = require('./config');
 const SetupLogBatcher = require('./setup-log-batcher');
 const { formatDuration } = require('./utils/format');
 
+// ANSI color codes for console output (reused from postinstall-colored.js)
+const COLORS = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  dim: '\x1b[2m',
+  gray: '\x1b[90m',
+  cyan: '\x1b[36m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  red: '\x1b[31m'
+};
+
+// Color by log level
+const LEVEL_COLORS = {
+  error: COLORS.red,
+  warn: COLORS.yellow,
+  info: COLORS.cyan,
+  debug: COLORS.gray
+};
+
 const LOG_LEVELS = {
   error: 0,
   warn: 1,
@@ -141,6 +161,49 @@ function formatMessage(message, data = null, includeMetadata = true) {
   return message;
 }
 
+/**
+ * Format structured data for human-readable console output
+ * @param {Object} data - Data object to format
+ * @returns {string} Formatted multi-line string
+ */
+function formatConsoleData(data) {
+  if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+    return '';
+  }
+
+  const lines = [];
+  const indent = '  ';
+
+  // Skip component since it's already in the prefix
+  const dataToShow = { ...data };
+  delete dataToShow.component;
+
+  // If too many keys, show count instead
+  if (Object.keys(dataToShow).length > 20) {
+    return '\n  [' + Object.keys(dataToShow).length + ' fields]';
+  }
+
+  // Format each key-value pair
+  for (const [key, value] of Object.entries(dataToShow)) {
+    if (value === null || value === undefined) continue;
+
+    let formattedValue;
+    if (typeof value === 'object') {
+      // Nested objects - compact JSON on same line
+      formattedValue = JSON.stringify(value);
+    } else if (typeof value === 'string' && value.length > 100) {
+      // Truncate long strings
+      formattedValue = value.substring(0, 97) + '...';
+    } else {
+      formattedValue = String(value);
+    }
+
+    lines.push(`${indent}${key}: ${formattedValue}`);
+  }
+
+  return lines.length > 0 ? '\n' + lines.join('\n') : '';
+}
+
 
 function log(level, message, data = null) {
   if (LOG_LEVELS[level] <= currentLevel) {
@@ -170,12 +233,38 @@ function log(level, message, data = null) {
     const safeMessage = redactSensitiveData(message);
 
     // Format for terminal output
+    const shouldUseColors = config.consoleColors !== false;
+    const shouldUsePrettyFormat = config.consoleFormat === 'pretty';
+
     if (hasData) {
-      // Redact and stringify data
+      // Redact data
       const redactedData = redactSensitiveData(enrichedData);
-      console.log(prefix, safeMessage, safeStringify(redactedData));
+
+      if (shouldUsePrettyFormat) {
+        // Use human-readable formatting
+        const consoleData = formatConsoleData(redactedData);
+
+        // Apply color coding
+        if (shouldUseColors) {
+          const levelColor = LEVEL_COLORS[level] || '';
+          const coloredMessage = levelColor + safeMessage + COLORS.reset;
+          console.log(prefix, coloredMessage + consoleData);
+        } else {
+          console.log(prefix, safeMessage + consoleData);
+        }
+      } else {
+        // Use original JSON format
+        console.log(prefix, safeMessage, safeStringify(redactedData));
+      }
     } else {
-      console.log(prefix, safeMessage);
+      // No data - just apply color to message
+      if (shouldUseColors && shouldUsePrettyFormat) {
+        const levelColor = LEVEL_COLORS[level] || '';
+        const coloredMessage = levelColor + safeMessage + COLORS.reset;
+        console.log(prefix, coloredMessage);
+      } else {
+        console.log(prefix, safeMessage);
+      }
     }
 
     // Send to API if job context is set (for info and error levels only)
