@@ -103,6 +103,30 @@ describe('Executor - Job Execution', () => {
       expect(result.summary).toBe('Implemented feature');
     });
 
+    test('routes clarifying_questions jobs correctly', async () => {
+      const job = {
+        id: 1,
+        job_type: 'clarifying_questions',
+        task_title: 'Test Questions',
+        prompt: 'Generate questions'
+      };
+
+      // Mock the executeClarifyingQuestions method
+      executor.executeClarifyingQuestions = jest.fn().mockResolvedValue({
+        output: '{"questions": [{"id": "q1", "text": "Test?", "required": true}]}',
+        executionTimeMs: 500
+      });
+
+      const result = await executor.execute(job, jest.fn());
+
+      expect(executor.executeClarifyingQuestions).toHaveBeenCalledWith(
+        job,
+        expect.any(Function),
+        expect.any(Number)
+      );
+      expect(JSON.parse(result.output).questions).toHaveLength(1);
+    });
+
     test('throws error for unknown job type', async () => {
       const job = {
         id: 1,

@@ -11,6 +11,7 @@ const GitHelper = require('./git-helper');
 const ClaudeRunner = require('./claude-runner');
 const PrdGenerationHandler = require('./job-handlers/prd-generation');
 const CodeExecutionHandler = require('./job-handlers/code-execution');
+const ClarifyingQuestionsHandler = require('./job-handlers/clarifying-questions');
 
 // Timing constants
 const PROCESS_KILL_GRACE_PERIOD_MS = 2000;
@@ -44,6 +45,14 @@ class Executor {
       pathValidator,
       this.claudeRunner,
       this.gitHelper,
+      apiClient
+    );
+
+    // Create ClarifyingQuestionsHandler with dependencies
+    this.clarifyingQuestionsHandler = new ClarifyingQuestionsHandler(
+      promptValidator,
+      pathValidator,
+      this.claudeRunner,
       apiClient
     );
   }
@@ -98,6 +107,8 @@ class Executor {
       return await this.executePrdGeneration(job, onProgress, startTime);
     } else if (job.job_type === 'code_execution') {
       return await this.executeCodeImplementation(job, onProgress, startTime);
+    } else if (job.job_type === 'clarifying_questions') {
+      return await this.executeClarifyingQuestions(job, onProgress, startTime);
     } else {
       throw new Error(`Unknown job type: ${job.job_type}`);
     }
@@ -137,6 +148,18 @@ class Executor {
     return await this.codeExecutionHandler.executeCodeImplementation(job, onProgress, startTime);
   }
 
+  /**
+   * Execute clarifying questions generation using Claude
+   * Delegates to ClarifyingQuestionsHandler
+   * @param {Object} job - Job object from API
+   * @param {Function} onProgress - Callback for progress updates
+   * @param {number} startTime - Start timestamp
+   * @returns {Promise<Object>} Execution result with JSON output
+   */
+  async executeClarifyingQuestions(job, onProgress, startTime) {
+    logger.info(`Generating clarifying questions for: ${job.task_title}`);
+    return await this.clarifyingQuestionsHandler.executeClarifyingQuestions(job, onProgress, startTime);
+  }
 
 
   /**
