@@ -65,7 +65,9 @@
       "Bash(brew list:*)",
       "Bash(node -e:*)",
       "Bash(git stash:*)",
-      "Bash(claude --print)"
+      "Bash(claude --print)",
+      "Bash(node bin/ralph-agent.js:*)",
+      "Bash(pkill:*)"
     ]
   }
 }
