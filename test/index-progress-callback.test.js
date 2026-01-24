@@ -58,6 +58,14 @@ describe('RalphAgent Progress Callback Error Handling', () => {
   });
 
   describe('Progress callback in processJob()', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
     test('job completes successfully even when progress update fails', async () => {
       const job = {
         id: 123,
@@ -111,7 +119,9 @@ describe('RalphAgent Progress Callback Error Handling', () => {
       mockExecutor.execute.mockImplementation(async (job, callback) => {
         progressCallback = callback;
         await callback('Starting...\n');
+        jest.advanceTimersByTime(100); // Allow throttle to pass
         await callback('Processing...\n');
+        jest.advanceTimersByTime(100); // Allow throttle to pass
         await callback('Done!\n');
         return {
           output: 'Complete',
@@ -148,7 +158,9 @@ describe('RalphAgent Progress Callback Error Handling', () => {
       mockExecutor.execute.mockImplementation(async (job, callback) => {
         progressCallback = callback;
         await callback('Chunk 1\n');
+        jest.advanceTimersByTime(100); // Allow throttle to pass
         await callback('Chunk 2\n');
+        jest.advanceTimersByTime(100); // Allow throttle to pass
         await callback('Chunk 3\n');
         return {
           output: 'Success',
@@ -209,7 +221,9 @@ describe('RalphAgent Progress Callback Error Handling', () => {
 
       mockExecutor.execute.mockImplementation(async (job, callback) => {
         await callback('');
+        jest.advanceTimersByTime(100);
         await callback('Valid output');
+        jest.advanceTimersByTime(100);
         await callback('');
         return {
           output: 'Done',
@@ -242,9 +256,13 @@ describe('RalphAgent Progress Callback Error Handling', () => {
 
       mockExecutor.execute.mockImplementation(async (job, callback) => {
         await callback('Output 1');
+        jest.advanceTimersByTime(100);
         await callback('Output 2');
+        jest.advanceTimersByTime(100);
         await callback('Output 3');
+        jest.advanceTimersByTime(100);
         await callback('Output 4');
+        jest.advanceTimersByTime(100);
         await callback('Output 5');
         return {
           output: 'Complete',
@@ -261,6 +279,178 @@ describe('RalphAgent Progress Callback Error Handling', () => {
 
       expect(mockApiClient.sendProgress).toHaveBeenCalledTimes(5);
       expect(mockApiClient.markJobCompleted).toHaveBeenCalled();
+      expect(mockApiClient.markJobFailed).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Progress callback throttling', () => {
+    let originalDateNow;
+    let currentTime;
+
+    beforeEach(() => {
+      // Mock Date.now() to control time
+      currentTime = 1000000;
+      originalDateNow = Date.now;
+      Date.now = jest.fn(() => currentTime);
+    });
+
+    afterEach(() => {
+      // Restore original Date.now()
+      Date.now = originalDateNow;
+    });
+
+    test('throttles rapid progress updates to max 10 per second', async () => {
+      const job = {
+        id: 333,
+        job_type: 'prd_generation',
+        task_title: 'Test throttling'
+      };
+
+      mockApiClient.sendProgress.mockResolvedValue();
+
+      mockExecutor.execute.mockImplementation(async (job, callback) => {
+        // Simulate rapid progress updates (20 updates in quick succession)
+        for (let i = 0; i < 20; i++) {
+          await callback(`Output ${i}`);
+          currentTime += 10; // Advance 10ms between updates
+        }
+        return {
+          output: 'Done',
+          executionTimeMs: 200,
+          prdContent: 'PRD'
+        };
+      });
+
+      mockApiClient.markJobRunning.mockResolvedValue();
+      mockApiClient.markJobCompleted.mockResolvedValue();
+
+      await agent.processJob(job);
+
+      // With 100ms throttle, only ~2 updates should go through (200ms / 100ms)
+      // First update always goes through, then one more after 100ms
+      expect(mockApiClient.sendProgress.mock.calls.length).toBeLessThan(20);
+      expect(mockApiClient.sendProgress.mock.calls.length).toBeGreaterThan(0);
+    });
+
+    test('allows progress update after throttle period expires', async () => {
+      const job = {
+        id: 444,
+        job_type: 'prd_generation',
+        task_title: 'Test throttle expiry'
+      };
+
+      mockApiClient.sendProgress.mockResolvedValue();
+
+      mockExecutor.execute.mockImplementation(async (job, callback) => {
+        await callback('Update 1');
+        currentTime += 50; // Less than 100ms throttle
+        await callback('Update 2'); // Should be throttled
+
+        currentTime += 60; // Total 110ms, more than 100ms throttle
+        await callback('Update 3'); // Should go through
+
+        return {
+          output: 'Done',
+          executionTimeMs: 110,
+          prdContent: 'PRD'
+        };
+      });
+
+      mockApiClient.markJobRunning.mockResolvedValue();
+      mockApiClient.markJobCompleted.mockResolvedValue();
+
+      await agent.processJob(job);
+
+      // Should have 2 updates: first one and the one after throttle expires
+      expect(mockApiClient.sendProgress).toHaveBeenCalledTimes(2);
+      expect(mockApiClient.sendProgress).toHaveBeenNthCalledWith(1, 444, 'Update 1');
+      expect(mockApiClient.sendProgress).toHaveBeenNthCalledWith(2, 444, 'Update 3');
+    });
+
+    test('allows progress updates across different jobs', async () => {
+      const job1 = {
+        id: 555,
+        job_type: 'prd_generation',
+        task_title: 'Job 1'
+      };
+
+      const job2 = {
+        id: 556,
+        job_type: 'prd_generation',
+        task_title: 'Job 2'
+      };
+
+      mockApiClient.sendProgress.mockResolvedValue();
+
+      // Process first job
+      mockExecutor.execute.mockImplementation(async (job, callback) => {
+        await callback('Job 1 update');
+        return {
+          output: 'Done',
+          executionTimeMs: 100,
+          prdContent: 'PRD'
+        };
+      });
+
+      mockApiClient.markJobRunning.mockResolvedValue();
+      mockApiClient.markJobCompleted.mockResolvedValue();
+
+      await agent.processJob(job1);
+
+      // Advance time between jobs
+      currentTime += 100;
+
+      // Process second job - throttle should be reset
+      mockExecutor.execute.mockImplementation(async (job, callback) => {
+        await callback('Job 2 update');
+        return {
+          output: 'Done',
+          executionTimeMs: 100,
+          prdContent: 'PRD'
+        };
+      });
+
+      await agent.processJob(job2);
+
+      // Both updates should go through (throttle resets per job)
+      expect(mockApiClient.sendProgress).toHaveBeenCalledWith(555, 'Job 1 update');
+      expect(mockApiClient.sendProgress).toHaveBeenCalledWith(556, 'Job 2 update');
+    });
+
+    test('throttling does not affect job completion', async () => {
+      const job = {
+        id: 666,
+        job_type: 'code_execution',
+        task_title: 'Test',
+        project: { system_path: '/test' }
+      };
+
+      mockApiClient.sendProgress.mockResolvedValue();
+
+      mockExecutor.execute.mockImplementation(async (job, callback) => {
+        // Rapid updates
+        for (let i = 0; i < 100; i++) {
+          await callback(`Line ${i}`);
+          currentTime += 5; // Very rapid
+        }
+        return {
+          output: 'Complete',
+          summary: 'Done',
+          branchName: 'branch',
+          executionTimeMs: 500
+        };
+      });
+
+      mockApiClient.markJobRunning.mockResolvedValue();
+      mockApiClient.markJobCompleted.mockResolvedValue();
+
+      await agent.processJob(job);
+
+      // Job should still complete successfully despite throttling
+      expect(mockApiClient.markJobCompleted).toHaveBeenCalledWith(
+        666,
+        expect.objectContaining({ output: 'Complete' })
+      );
       expect(mockApiClient.markJobFailed).not.toHaveBeenCalled();
     });
   });

@@ -4,10 +4,14 @@ const config = require('./config');
 const logger = require('./logger');
 const { formatDuration } = require('./utils/format');
 
-// Timing constants
-const SHUTDOWN_DELAY_MS = 500;
-const ERROR_RETRY_DELAY_MS = 5000;
-const HEARTBEAT_INTERVAL_MS = 60000;
+// Timeout constants
+const TIMEOUTS = {
+  SHUTDOWN_DELAY_MS: 500, // Delay before shutdown
+  ERROR_RETRY_DELAY_MS: 5000, // 5 seconds retry delay after errors
+  HEARTBEAT_INTERVAL_MS: 60000, // 60 seconds (1 minute) for heartbeat
+  PROGRESS_THROTTLE_MS: 100, // 100ms throttle (max 10 progress updates per second)
+  MIN_REQUEST_INTERVAL_MS: 1000, // Minimum 1 second between API requests
+};
 
 class RalphAgent {
   constructor() {
@@ -19,13 +23,15 @@ class RalphAgent {
     this.isRunning = false;
     this.currentJob = null;
     this.heartbeatInterval = null;
-    this.jobCompleting = false; // Flag to prevent heartbeat race conditions
     this.jobStartTime = null; // Track when job started for elapsed time
 
     // Rate limiting state
     this.consecutiveErrors = 0;
     this.lastRequestTime = 0;
-    this.minRequestInterval = 1000; // Minimum 1s between requests
+    this.minRequestInterval = TIMEOUTS.MIN_REQUEST_INTERVAL_MS;
+
+    // Progress throttling state
+    this.lastProgressUpdate = 0;
   }
 
   /**
@@ -79,7 +85,7 @@ class RalphAgent {
 
     logger.info('Ralph Agent stopped');
     // Give async operations time to complete before exiting
-    setTimeout(() => process.exit(0), SHUTDOWN_DELAY_MS);
+    setTimeout(() => process.exit(0), TIMEOUTS.SHUTDOWN_DELAY_MS);
   }
 
   /**
@@ -116,7 +122,7 @@ class RalphAgent {
 
         // Exponential backoff: 5s, 10s, 20s, 40s, max 60s
         const backoffTime = Math.min(
-          ERROR_RETRY_DELAY_MS * Math.pow(2, this.consecutiveErrors - 1),
+          TIMEOUTS.ERROR_RETRY_DELAY_MS * Math.pow(2, this.consecutiveErrors - 1),
           60000
         );
 
@@ -138,7 +144,6 @@ class RalphAgent {
    */
   async processJob(job) {
     this.currentJob = job;
-    this.jobCompleting = false;
     this.jobStartTime = Date.now(); // Track start time for elapsed time calculation
 
     logger.info('═══════════════════════════════════════════════════════════');
@@ -161,36 +166,40 @@ class RalphAgent {
 
     try {
       // Mark job as running
-      logger.info('Marking job as running...');
+      logger.debug('Marking job as running...');
       await this.apiClient.markJobRunning(job.id);
-      logger.info('Job marked as running in API');
+      logger.debug('Job marked as running in API');
 
       // Send initial status event
-      logger.info('Sending initial status event to UI...');
+      logger.debug('Sending initial status event to UI...');
       await this.apiClient.sendStatusEvent(job.id, 'job_claimed', `Starting: ${job.task_title}`);
 
       // Start heartbeat to keep job alive
-      logger.info('Starting heartbeat timer...');
+      logger.debug('Starting heartbeat timer...');
       this.startHeartbeat(job.id);
+
+      // Reset progress throttle for new job
+      this.lastProgressUpdate = 0;
 
       // Execute the job with progress callback
       logger.info('Beginning job execution...');
       const result = await this.executor.execute(job, async (chunk) => {
-        // Send progress update to server
+        // Throttle progress updates to prevent flooding (max 10 updates/sec)
+        const now = Date.now();
+        if (now - this.lastProgressUpdate < TIMEOUTS.PROGRESS_THROTTLE_MS) {
+          return; // Skip this update
+        }
+        this.lastProgressUpdate = now;
+
+        // Send progress update to server (best-effort, don't fail job on error)
         try {
           await this.apiClient.sendProgress(job.id, chunk);
         } catch (error) {
-          logger.warn(`Failed to send progress update for job #${job.id}: ${error.message}`);
-          // Don't fail the job if progress update fails
+          logger.debug(`Progress update failed for job #${job.id}: ${error.message}`);
         }
       });
 
       logger.info('Job execution completed, processing results...');
-
-      // Set flag to prevent heartbeat race conditions, then stop heartbeat
-      this.jobCompleting = true;
-      this.stopHeartbeat();
-      logger.info('Heartbeat stopped');
 
       // Mark job as completed
       logger.info('Marking job as completed in API...');
@@ -213,10 +222,6 @@ class RalphAgent {
       });
       logger.error('═══════════════════════════════════════════════════════════');
 
-      // Set flag to prevent heartbeat race conditions, then stop heartbeat
-      this.jobCompleting = true;
-      this.stopHeartbeat();
-
       // Mark job as failed (pass full error object to include categorization)
       logger.info('Marking job as failed in API...');
       await this.apiClient.markJobFailed(
@@ -227,14 +232,17 @@ class RalphAgent {
 
       logger.error(`Job #${job.id} marked as failed in API`);
     } finally {
+      // Stop heartbeat immediately to prevent race conditions
+      this.stopHeartbeat();
+      logger.info('Heartbeat stopped');
+
       // Clear logger context (flush remaining batched logs)
       logger.info('Flushing remaining logs to API...');
       await logger.clearJobContext();
       logger.info('Logger context cleared');
 
-      // Clear current job reference and reset completion flag
+      // Clear current job reference and reset time tracking
       this.currentJob = null;
-      this.jobCompleting = false;
       this.jobStartTime = null;
     }
   }
@@ -247,12 +255,6 @@ class RalphAgent {
   startHeartbeat(jobId) {
     // Send heartbeat every 60 seconds to prevent timeout
     this.heartbeatInterval = setInterval(async () => {
-      // Check if job is completing to prevent race conditions
-      if (this.jobCompleting) {
-        logger.debug('Skipping heartbeat - job is completing');
-        return;
-      }
-
       try {
         // Calculate elapsed time
         const elapsed = Date.now() - this.jobStartTime;
@@ -272,7 +274,7 @@ class RalphAgent {
       } catch (err) {
         logger.warn('Heartbeat failed: ' + err.message);
       }
-    }, HEARTBEAT_INTERVAL_MS);
+    }, TIMEOUTS.HEARTBEAT_INTERVAL_MS);
   }
 
   /**
