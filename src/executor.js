@@ -626,101 +626,6 @@ ${this.capturedStderr || 'No stderr captured'}
   }
 
   /**
-   * Run Claude CLI skill (e.g., /prd)
-   * @param {string} skill - Skill name (without /)
-   * @param {string} prompt - Input for the skill
-   * @param {string} cwd - Working directory
-   * @param {Function} onProgress - Progress callback
-   * @param {number} timeout - Timeout in milliseconds (default: 1 hour)
-   * @returns {Promise<string>} Command output
-   */
-  runClaudeSkill(skill, prompt, cwd, onProgress, timeout = 3600000) {
-    return new Promise((resolve, reject) => {
-      logger.debug(`Running Claude skill: /${skill} with timeout: ${timeout}ms`);
-
-      const claude = spawn('claude', ['--print', '--permission-mode', 'acceptEdits', `/${skill}`], {
-        cwd: cwd,
-        shell: false,  // FIXED: Don't use shell
-        env: this.getSanitizedEnv()
-      });
-
-      // Set timeout
-      const timer = setTimeout(() => {
-        logger.error(`Claude skill /${skill} timed out after ${timeout}ms`);
-        claude.kill('SIGTERM');
-        reject(new Error(`Claude skill /${skill} execution timed out after ${timeout}ms`));
-      }, timeout);
-
-      // Track process for shutdown cleanup
-      this.currentProcess = claude;
-
-      // Send prompt to stdin
-      claude.stdin.write(prompt);
-      claude.stdin.end();
-
-      let stdout = '';
-      let stderr = '';
-
-      claude.stdout.on('data', (data) => {
-        const chunk = data.toString();
-        stdout += chunk;
-
-        // Write directly to stdout for terminal visibility
-        process.stdout.write(chunk);
-
-        if (onProgress) {
-          onProgress(chunk);
-        }
-      });
-
-      claude.stderr.on('data', (data) => {
-        const chunk = data.toString();
-        stderr += chunk;
-
-        // Write directly to stderr for terminal visibility
-        process.stderr.write(chunk);
-      });
-
-      claude.on('close', (code) => {
-        clearTimeout(timer); // Clear timeout
-        this.currentProcess = null; // Clear process reference
-        if (code === 0) {
-          logger.debug(`Claude skill /${skill} completed successfully`);
-          resolve(stdout);
-        } else {
-          logger.error(`Claude skill /${skill} exited with code ${code}`);
-          const baseError = new Error(`Claude skill /${skill} failed with exit code ${code}: ${stderr}`);
-          const errorInfo = this.categorizeError(baseError, stderr, code);
-
-          // Attach categorization to error object
-          const enrichedError = new Error(errorInfo.userMessage);
-          enrichedError.category = errorInfo.category;
-          enrichedError.technicalDetails = errorInfo.technicalDetails;
-          enrichedError.partialOutput = stdout; // Include any partial output
-
-          reject(enrichedError);
-        }
-      });
-
-      claude.on('error', (error) => {
-        clearTimeout(timer); // Clear timeout
-        this.currentProcess = null; // Clear process reference
-        logger.error(`Failed to spawn Claude skill /${skill}`, error.message);
-
-        const errorInfo = this.categorizeError(error, stderr, null);
-
-        // Attach categorization to error object
-        const enrichedError = new Error(errorInfo.userMessage);
-        enrichedError.category = errorInfo.category;
-        enrichedError.technicalDetails = errorInfo.technicalDetails;
-        enrichedError.partialOutput = stdout; // Include any partial output
-
-        reject(enrichedError);
-      });
-    });
-  }
-
-  /**
    * Run Claude CLI with the given prompt
    * @param {string} prompt - Prompt text
    * @param {string} cwd - Working directory
@@ -925,19 +830,19 @@ ${this.capturedStderr || 'No stderr captured'}
       worktreePath
     });
 
-    // Spawn Claude with same flags as current implementation
-    logger.info('Spawning Claude CLI process with --permission-mode acceptEdits --debug');
+    // Spawn Claude with streaming JSON output for visibility
+    logger.info('Spawning Claude CLI process with --output-format stream-json --verbose');
 
     // Send to API/UI
     if (this.apiClient && this.apiClient.sendProgress) {
-      this.apiClient.sendProgress(job.id, 'Spawning Claude CLI process with --permission-mode acceptEdits --debug\n')
+      this.apiClient.sendProgress(job.id, 'Spawning Claude CLI process with --output-format stream-json --verbose\n')
         .catch(err => logger.warn(`Failed to send progress to API: ${err.message}`));
     }
 
-    const claudeProcess = spawn('claude', ['--print', '--permission-mode', 'acceptEdits', '--debug'], {
+    const claudeProcess = spawn('claude', ['--print', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits'], {
       cwd: worktreePath,
-      shell: false,  // Security: don't use shell
-      env: this.getSanitizedEnv()  // Use existing sanitization method
+      shell: false,
+      env: this.getSanitizedEnv()
     });
 
     // Set timeout (same as current runClaude)
@@ -968,45 +873,55 @@ ${this.capturedStderr || 'No stderr captured'}
 
     let output = '';
     let errorOutput = '';
-    let lastLogTime = Date.now();
-    const LOG_INTERVAL = 10000; // Log progress every 10 seconds
+    let finalResult = '';
+    let lineBuffer = '';
 
     return new Promise((resolve, reject) => {
-      // Capture stdout and stream to API
-      // NOTE: Sends FULL Claude output to API/UI in real-time
-      // This includes all tool calls, file reads, reasoning, etc.
+      // Capture stdout and parse JSON events
       claudeProcess.stdout.on('data', async (data) => {
         const chunk = data.toString();
         output += chunk;
+        lineBuffer += chunk;
 
-        // Write directly to stdout for terminal visibility (RAW output, no logger prefix)
-        process.stdout.write(chunk);
+        // Process complete JSON lines
+        const lines = lineBuffer.split('\n');
+        lineBuffer = lines.pop(); // Keep incomplete line in buffer
 
-        // Stream progress to API in real-time (full output)
-        if (this.apiClient) {
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          
           try {
-            await this.apiClient.sendProgress(job.id, chunk, {
-              component: 'claude',
-              operation: 'execution'
-            });
-          } catch (err) {
-            logger.warn(`Failed to send progress to API: ${err.message}`);
+            const event = JSON.parse(line);
+            this.logClaudeEvent(event);
+            
+            // Extract final result text
+            if (event.type === 'result' && event.result) {
+              finalResult = event.result;
+            }
+            
+            // Detect and emit events
+            this.detectAndEmitEvents(line);
+            
+            // Stream progress to API in real-time
+            if (this.apiClient) {
+              try {
+                await this.apiClient.sendProgress(job.id, line + '\n', {
+                  component: 'claude',
+                  operation: 'execution'
+                });
+              } catch (err) {
+                logger.warn(`Failed to send progress to API: ${err.message}`);
+              }
+            }
+            
+            // Call onProgress callback (for backwards compatibility)
+            if (onProgress) {
+              onProgress(line + '\n');
+            }
+          } catch (e) {
+            // Not valid JSON, log raw
+            logger.debug(`Non-JSON output: ${line}`);
           }
-        }
-
-        // Detect and emit events from stdout
-        this.detectAndEmitEvents(chunk);
-
-        // Call onProgress callback (for backwards compatibility)
-        if (onProgress) {
-          onProgress(chunk);
-        }
-
-        // Log locally (periodically to avoid spam)
-        const now = Date.now();
-        if (now - lastLogTime > LOG_INTERVAL) {
-          logger.debug(`Claude still running... (${Math.floor((now - startTime) / 1000)}s elapsed)`);
-          lastLogTime = now;
         }
       });
 
@@ -1017,16 +932,8 @@ ${this.capturedStderr || 'No stderr captured'}
         // Save to instance variable for log file
         this.capturedStderr = (this.capturedStderr || '') + chunk;
 
-        // Write directly to stderr for terminal visibility (RAW output, no logger prefix)
+        // Log stderr but don't treat as JSON
         process.stderr.write(chunk);
-
-        // Detect and emit events from stderr (Claude outputs a lot to stderr)
-        this.detectAndEmitEvents(chunk);
-
-        // Also send stderr to API for debugging
-        if (onProgress) {
-          onProgress(chunk);
-        }
       });
 
       // Wait for completion
@@ -1035,6 +942,19 @@ ${this.capturedStderr || 'No stderr captured'}
         this.currentProcess = null;
         const duration = Date.now() - startTime;
 
+        // Process any remaining buffered content
+        if (lineBuffer.trim()) {
+          try {
+            const event = JSON.parse(lineBuffer);
+            this.logClaudeEvent(event);
+            if (event.type === 'result' && event.result) {
+              finalResult = event.result;
+            }
+          } catch (e) {
+            // Ignore incomplete JSON
+          }
+        }
+
         if (code === 0) {
           logger.info(`Claude completed successfully in ${this.formatDuration(duration)}`);
 
@@ -1042,7 +962,7 @@ ${this.capturedStderr || 'No stderr captured'}
           const branchName = await this.getCurrentBranch(worktreePath);
 
           resolve({
-            output,
+            output: finalResult || output,
             branchName,
             duration
           });
