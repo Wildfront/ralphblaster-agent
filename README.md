@@ -128,26 +128,17 @@ ralph-agent
 
 For `code_execution` job types, the agent uses the Ralph autonomous system - an iterative, PRD-driven execution framework that enables complex, multi-step implementations.
 
-### How Ralph Works
+### How the Agent Works
 
-1. **Worktree Creation**: Creates an isolated git worktree for the job
-2. **Instance Setup**: Creates a `ralph-instance/` directory with:
-   - `prd.json` - Converted from the job prompt using Claude `/ralph` skill
-   - `ralph.sh` - The autonomous agent loop script
-   - `prompt.md` - Agent instructions
-   - `progress.txt` - Progress tracking log
-3. **Iterative Execution**: Ralph runs up to 10 iterations, each:
-   - Reading the PRD and current progress
-   - Selecting the next highest-priority user story
-   - Implementing the story in the worktree
-   - Running quality checks (tests, typecheck, lint)
-   - Committing changes
-   - Updating the PRD to mark the story as complete
-   - Logging progress
-4. **Completion Detection**: Ralph signals completion with `<promise>COMPLETE</promise>` when all stories pass
-5. **Progress Reporting**: Real-time updates from `progress.txt` are sent back to the API
+1. **Poll for Jobs**: Agent continuously polls `/api/v1/ralph/jobs/next` for available work
+2. **Worktree Creation**: Creates an isolated git worktree for each job in `{repo}-worktrees/job-{id}/`
+3. **Claude Execution**: Runs Claude CLI directly in the worktree with the server-provided prompt
+4. **Progress Streaming**: Real-time output streamed to `.ralph-logs/job-{id}.log` and sent to API
+5. **Git Activity**: Commits are made in the worktree, then pushed to remote
+6. **Completion**: Job status and results reported back to API via `/api/v1/ralph/jobs/{id}`
+7. **Cleanup**: Worktrees are automatically removed after job completion (configurable)
 
-### Ralph Directory Structure
+### Directory Structure
 
 Worktrees are created as siblings to your project (not inside it) to prevent git conflicts:
 
@@ -155,18 +146,15 @@ Worktrees are created as siblings to your project (not inside it) to prevent git
 my-project/                      # Your main repository
 my-project-worktrees/            # Worktrees (sibling directory)
 └── job-{id}/                    # Isolated worktree for each job
-    ├── ralph-instance/          # Ralph state directory
-    │   ├── ralph.sh             # Execution loop
-    │   ├── prompt.md            # Agent instructions
-    │   ├── prd.json             # Generated PRD with user stories
-    │   ├── progress.txt         # Progress log
-    │   └── .worktree-path       # Worktree location reference
     └── [project files...]       # Isolated copy of project code
+.ralph-logs/                     # Log files (persisted)
+└── job-{id}.log                 # Agent execution log
+└── job-{id}-stderr.log          # Error output (if any)
 ```
 
-### Environment Variables for Ralph
+### Key Features
 
-Ralph execution uses these environment variables:
+Agent directly executes Claude CLI with:
 
 - `RALPH_WORKTREE_PATH` - Path to the git worktree
 - `RALPH_INSTANCE_DIR` - Path to the Ralph instance directory

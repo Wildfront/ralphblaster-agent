@@ -13,14 +13,12 @@ const TIMEOUTS = {
  *
  * This class encapsulates all Claude CLI interaction including:
  * - Spawning Claude processes with proper security
- * - Parsing stream-json output format
+ * - Streaming raw terminal output
  * - Handling timeouts and errors
- * - Event detection and logging
  */
 class ClaudeRunner {
-  constructor(errorHandler, eventDetector, gitHelper) {
+  constructor(errorHandler, gitHelper) {
     this.errorHandler = errorHandler;
-    this.eventDetector = eventDetector;
     this.gitHelper = gitHelper;
     this.currentProcess = null;
     this.currentJobId = null;
@@ -118,9 +116,9 @@ class ClaudeRunner {
       });
 
       // Use stdin to pass prompt - avoids shell injection
-      // Use --output-format stream-json --verbose to get structured streaming output
-      logger.info('Spawning Claude CLI process with --output-format stream-json --verbose');
-      const claude = spawn('claude', ['--print', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits'], {
+      // Use default pretty output format (same as running claude in terminal)
+      logger.info('Spawning Claude CLI process with default terminal output');
+      const claude = spawn('claude', ['--print', '--permission-mode', 'acceptEdits'], {
         cwd: cwd,
         shell: false,
         env: this.getSanitizedEnv()
@@ -152,54 +150,15 @@ class ClaudeRunner {
 
       let stdout = '';
       let stderr = '';
-      let finalResult = '';
-      let assistantTextContent = ''; // Collect all assistant text for PRD content
-      let lineBuffer = '';
 
       claude.stdout.on('data', (data) => {
         const chunk = data.toString();
         stdout += chunk;
-        lineBuffer += chunk;
 
-        // Process complete JSON lines
-        const lines = lineBuffer.split('\n');
-        lineBuffer = lines.pop(); // Keep incomplete line in buffer
 
-        for (const line of lines) {
-          if (!line.trim()) continue;
-
-          try {
-            const event = JSON.parse(line);
-            this.logClaudeEvent(event);
-
-            // Extract final result text
-            if (event.type === 'result' && event.result) {
-              finalResult = event.result;
-            }
-
-            // Extract assistant text content for PRD generation
-            if (event.type === 'assistant' && event.message?.content) {
-              for (const content of event.message.content) {
-                if (content.type === 'text' && content.text) {
-                  assistantTextContent += content.text + '\n';
-                }
-              }
-            }
-
-            // Detect and emit events
-            this.eventDetector.detectAndEmit(line, this.currentJobId, this.apiClient);
-
-            // Send progress updates
-            if (onProgress) {
-              // Format event for UI if possible, otherwise use raw JSON
-              const formattedMessage = this.formatEventForUI(event);
-              const uiMessage = formattedMessage || (line + '\n');
-              onProgress(uiMessage);
-            }
-          } catch (e) {
-            // Not valid JSON, log raw
-            logger.debug(`Non-JSON output: ${line}`);
-          }
+        // Send progress updates (raw terminal output)
+        if (onProgress) {
+          onProgress(chunk);
         }
       });
 
@@ -217,41 +176,15 @@ class ClaudeRunner {
         clearTimeout(timer); // Clear timeout
         this.currentProcess = null; // Clear process reference
 
-        // Process any remaining buffered content
-        if (lineBuffer.trim()) {
-          try {
-            const event = JSON.parse(lineBuffer);
-            this.logClaudeEvent(event);
-            if (event.type === 'result' && event.result) {
-              finalResult = event.result;
-            }
-            // Extract assistant text from remaining buffer
-            if (event.type === 'assistant' && event.message?.content) {
-              for (const content of event.message.content) {
-                if (content.type === 'text' && content.text) {
-                  assistantTextContent += content.text + '\n';
-                }
-              }
-            }
-          } catch (e) {
-            // Ignore incomplete JSON
-          }
-        }
-
         logger.info(`Claude CLI process exited`, {
           exitCode: code,
           stdoutLength: stdout.length,
-          stderrLength: stderr.length,
-          assistantTextLength: assistantTextContent.length
+          stderrLength: stderr.length
         });
 
         if (code === 0) {
           logger.info('Claude CLI execution completed successfully');
-          // For PRD generation, prefer assistant text content over summary result
-          // For code execution, fall back to finalResult or raw stdout
-          const output = assistantTextContent.trim() || finalResult || stdout;
-          logger.debug(`Returning output (source: ${assistantTextContent.trim() ? 'assistant_text' : finalResult ? 'final_result' : 'stdout'})`);
-          resolve(output);
+          resolve(stdout);
         } else {
           logger.error(`Claude CLI exited with non-zero code ${code}`);
           logger.error('Last 1000 chars of stderr:', stderr.slice(-1000));
@@ -332,16 +265,16 @@ class ClaudeRunner {
       worktreePath
     });
 
-    // Spawn Claude with streaming JSON output for visibility
-    logger.info('Spawning Claude CLI process with --output-format stream-json --verbose');
+    // Spawn Claude with default terminal output for visibility
+    logger.info('Spawning Claude CLI process with default terminal output');
 
     // Send to API/UI
     if (this.apiClient && this.apiClient.sendProgress) {
-      this.apiClient.sendProgress(job.id, 'Spawning Claude CLI process with --output-format stream-json --verbose\n')
+      this.apiClient.sendProgress(job.id, 'Spawning Claude CLI process with default terminal output\n')
         .catch(err => logger.warn(`Failed to send progress to API: ${err.message}`));
     }
 
-    const claudeProcess = spawn('claude', ['--print', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits'], {
+    const claudeProcess = spawn('claude', ['--print', '--permission-mode', 'acceptEdits'], {
       cwd: worktreePath,
       shell: false,
       env: this.getSanitizedEnv()
@@ -375,72 +308,29 @@ class ClaudeRunner {
 
     let output = '';
     let errorOutput = '';
-    let finalResult = '';
-    let assistantTextContent = ''; // Collect all assistant text
-    let lineBuffer = '';
 
     return new Promise((resolve, reject) => {
-      // Capture stdout and parse JSON events
+      // Capture stdout and stream raw output
       claudeProcess.stdout.on('data', async (data) => {
         const chunk = data.toString();
         output += chunk;
-        lineBuffer += chunk;
 
-        // Process complete JSON lines
-        const lines = lineBuffer.split('\n');
-        lineBuffer = lines.pop(); // Keep incomplete line in buffer
 
-        for (const line of lines) {
-          if (!line.trim()) continue;
-
+        // Stream progress to API in real-time (raw terminal output)
+        if (this.apiClient) {
           try {
-            const event = JSON.parse(line);
-            this.logClaudeEvent(event);
-
-            // Extract final result text
-            if (event.type === 'result' && event.result) {
-              finalResult = event.result;
-            }
-
-            // Extract assistant text content
-            if (event.type === 'assistant' && event.message?.content) {
-              for (const content of event.message.content) {
-                if (content.type === 'text' && content.text) {
-                  assistantTextContent += content.text + '\n';
-                }
-              }
-            }
-
-            // Detect and emit events
-            this.eventDetector.detectAndEmit(line, this.currentJobId, this.apiClient);
-
-            // Stream progress to API in real-time
-            if (this.apiClient) {
-              try {
-                // Format event for UI if possible, otherwise use raw JSON
-                const formattedMessage = this.formatEventForUI(event);
-                const uiMessage = formattedMessage || (line + '\n');
-
-                await this.apiClient.sendProgress(job.id, uiMessage, {
-                  component: 'claude',
-                  operation: 'execution'
-                });
-              } catch (err) {
-                logger.warn(`Failed to send progress to API: ${err.message}`);
-              }
-            }
-
-            // Call onProgress callback (for backwards compatibility)
-            if (onProgress) {
-              // Format event for UI if possible, otherwise use raw JSON
-              const formattedMessage = this.formatEventForUI(event);
-              const uiMessage = formattedMessage || (line + '\n');
-              onProgress(uiMessage);
-            }
-          } catch (e) {
-            // Not valid JSON, log raw
-            logger.debug(`Non-JSON output: ${line}`);
+            await this.apiClient.sendProgress(job.id, chunk, {
+              component: 'claude',
+              operation: 'execution'
+            });
+          } catch (err) {
+            logger.warn(`Failed to send progress to API: ${err.message}`);
           }
+        }
+
+        // Call onProgress callback (for backwards compatibility)
+        if (onProgress) {
+          onProgress(chunk);
         }
       });
 
@@ -461,38 +351,14 @@ class ClaudeRunner {
         this.currentProcess = null;
         const duration = Date.now() - startTime;
 
-        // Process any remaining buffered content
-        if (lineBuffer.trim()) {
-          try {
-            const event = JSON.parse(lineBuffer);
-            this.logClaudeEvent(event);
-            if (event.type === 'result' && event.result) {
-              finalResult = event.result;
-            }
-            // Extract assistant text from remaining buffer
-            if (event.type === 'assistant' && event.message?.content) {
-              for (const content of event.message.content) {
-                if (content.type === 'text' && content.text) {
-                  assistantTextContent += content.text + '\n';
-                }
-              }
-            }
-          } catch (e) {
-            // Ignore incomplete JSON
-          }
-        }
-
         if (code === 0) {
           logger.info(`Claude completed successfully in ${formatDuration(duration)}`);
 
           // Get branch name from worktree
           const branchName = await this.gitHelper.getCurrentBranch(worktreePath);
 
-          // Prefer assistant text content over summary result
-          const outputText = assistantTextContent.trim() || finalResult || output;
-
           resolve({
-            output: outputText,
+            output: output,
             branchName,
             duration
           });
@@ -531,115 +397,6 @@ class ClaudeRunner {
     });
   }
 
-  /**
-   * Log Claude stream-json events to the terminal in a human-readable format
-   * @param {Object} event - Parsed JSON event from Claude CLI
-   */
-  logClaudeEvent(event) {
-    switch (event.type) {
-      case 'system':
-        if (event.subtype === 'init') {
-          logger.info(`🚀 Claude session started (model: ${event.model})`);
-        } else if (event.subtype === 'hook_started') {
-          const hookName = event.hook_name || 'unknown';
-          logger.info(`🪝 Hook started: ${hookName}`);
-        } else if (event.subtype === 'hook_response') {
-          const hookName = event.hook_name || 'unknown';
-          const outcome = event.outcome || 'unknown';
-          const exitCode = event.exit_code !== undefined ? event.exit_code : 0;
-
-          if (outcome === 'success') {
-            logger.info(`✓ Hook completed: ${hookName} (exit code ${exitCode})`);
-          } else {
-            const stderr = event.stderr || '';
-            const errorMsg = stderr.split('\n')[0].substring(0, 100);
-            const msg = `✗ Hook failed: ${hookName} (exit code ${exitCode})${errorMsg ? ' - ' + errorMsg : ''}`;
-            logger.error(msg);
-          }
-        }
-        break;
-
-      case 'assistant':
-        if (event.message?.content) {
-          for (const content of event.message.content) {
-            if (content.type === 'text' && content.text) {
-              // Log assistant text output
-              logger.info(`💬 ${content.text}`);
-            } else if (content.type === 'tool_use') {
-              // Log tool invocation
-              const toolName = content.name;
-              const input = content.input || {};
-              let inputSummary = '';
-
-              // Summarize common tool inputs
-              if (input.file_path || input.path) {
-                inputSummary = ` → ${path.basename(input.file_path || input.path)}`;
-              } else if (input.command) {
-                const cmd = input.command.substring(0, 60);
-                inputSummary = ` → ${cmd}${input.command.length > 60 ? '...' : ''}`;
-              } else if (input.pattern) {
-                inputSummary = ` → "${input.pattern}"`;
-              }
-
-              logger.info(`🔧 ${toolName}${inputSummary}`);
-            }
-          }
-        }
-        break;
-
-      case 'user':
-        // Tool results - show brief confirmation
-        if (event.tool_use_result) {
-          const result = event.tool_use_result;
-          if (result.file) {
-            logger.debug(`Read ${result.file.numLines} lines from ${path.basename(result.file.filePath)}`);
-          } else if (result.type === 'text' && result.output) {
-            const lines = result.output.split('\n').length;
-            logger.debug(`Result: ${lines} lines`);
-          }
-        }
-        break;
-
-      case 'result':
-        if (event.subtype === 'success') {
-          logger.info(`✅ Completed in ${formatDuration(event.duration_ms)} (${event.num_turns} turns, $${event.total_cost_usd?.toFixed(4) || '0.00'})`);
-        } else if (event.is_error) {
-          logger.error(`❌ Failed: ${event.error || 'Unknown error'}`);
-        }
-        break;
-    }
-  }
-
-  /**
-   * Format Claude stream-json events for UI display (human-readable)
-   * Returns formatted string for UI, or null to use original JSON
-   * @param {Object} event - Parsed JSON event from Claude CLI
-   * @returns {string|null} Formatted message for UI, or null to use raw JSON
-   */
-  formatEventForUI(event) {
-    // Only format specific event types that need user-friendly display
-    if (event.type === 'system') {
-      if (event.subtype === 'hook_started') {
-        const hookName = event.hook_name || 'unknown';
-        return `Hook started: ${hookName}`;
-      } else if (event.subtype === 'hook_response') {
-        const hookName = event.hook_name || 'unknown';
-        const outcome = event.outcome || 'unknown';
-        const exitCode = event.exit_code !== undefined ? event.exit_code : 0;
-
-        if (outcome === 'success') {
-          return `Hook completed: ${hookName} (exit code ${exitCode})`;
-        } else {
-          const stderr = event.stderr || '';
-          const errorMsg = stderr.split('\n')[0].substring(0, 100);
-          return `Hook failed: ${hookName} (exit code ${exitCode})${errorMsg ? ' - ' + errorMsg : ''}`;
-        }
-      }
-    }
-
-    // Return null for event types we don't format yet (use raw JSON)
-    return null;
-  }
 }
 
 module.exports = ClaudeRunner;
