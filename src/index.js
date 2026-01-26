@@ -1,6 +1,7 @@
 const ApiClient = require('./api-client');
 const Executor = require('./executor');
 const config = require('./config');
+const loggingConfig = require('./logging/config');
 const logger = require('./logger');
 const { formatDuration } = require('./utils/format');
 
@@ -15,8 +16,8 @@ const TIMEOUTS = {
 
 class RalphAgent {
   constructor() {
-    // Agent ID for multi-agent support
-    this.agentId = process.env.RALPH_AGENT_ID || 'agent-default';
+    // Agent ID for multi-agent support (from centralized logging config)
+    this.agentId = loggingConfig.agentId;
 
     this.apiClient = new ApiClient(this.agentId);
     this.executor = new Executor(this.apiClient);

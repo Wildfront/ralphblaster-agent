@@ -1,5 +1,6 @@
 require('dotenv').config();
 const ConfigFileManager = require('./config-file-manager');
+const loggingConfig = require('./logging/config');
 
 // Load config from ~/.ralphblasterrc
 const configFileManager = new ConfigFileManager();
@@ -14,12 +15,11 @@ const config = {
   // Execution configuration
   maxRetries: parseInt(process.env.RALPH_MAX_RETRIES || '3', 10),
 
-  // Logging
-  logLevel: process.env.RALPH_LOG_LEVEL || 'info',
-
-  // Console formatting
-  consoleColors: process.env.RALPH_CONSOLE_COLORS !== 'false', // Default true
-  consoleFormat: process.env.RALPH_CONSOLE_FORMAT || 'pretty'  // 'pretty' or 'json'
+  // Logging configuration (imported from centralized logging/config.js)
+  // These are re-exported here for backward compatibility
+  logLevel: loggingConfig.logLevel,
+  consoleColors: loggingConfig.consoleColors,
+  consoleFormat: loggingConfig.consoleFormat
 };
 
 // Validate required configuration
