@@ -191,7 +191,10 @@ class ClaudeRunner {
 
             // Send progress updates
             if (onProgress) {
-              onProgress(line + '\n');
+              // Format event for UI if possible, otherwise use raw JSON
+              const formattedMessage = this.formatEventForUI(event);
+              const uiMessage = formattedMessage || (line + '\n');
+              onProgress(uiMessage);
             }
           } catch (e) {
             // Not valid JSON, log raw
@@ -414,7 +417,11 @@ class ClaudeRunner {
             // Stream progress to API in real-time
             if (this.apiClient) {
               try {
-                await this.apiClient.sendProgress(job.id, line + '\n', {
+                // Format event for UI if possible, otherwise use raw JSON
+                const formattedMessage = this.formatEventForUI(event);
+                const uiMessage = formattedMessage || (line + '\n');
+
+                await this.apiClient.sendProgress(job.id, uiMessage, {
                   component: 'claude',
                   operation: 'execution'
                 });
@@ -425,7 +432,10 @@ class ClaudeRunner {
 
             // Call onProgress callback (for backwards compatibility)
             if (onProgress) {
-              onProgress(line + '\n');
+              // Format event for UI if possible, otherwise use raw JSON
+              const formattedMessage = this.formatEventForUI(event);
+              const uiMessage = formattedMessage || (line + '\n');
+              onProgress(uiMessage);
             }
           } catch (e) {
             // Not valid JSON, log raw
@@ -530,6 +540,22 @@ class ClaudeRunner {
       case 'system':
         if (event.subtype === 'init') {
           logger.info(`🚀 Claude session started (model: ${event.model})`);
+        } else if (event.subtype === 'hook_started') {
+          const hookName = event.hook_name || 'unknown';
+          logger.info(`🪝 Hook started: ${hookName}`);
+        } else if (event.subtype === 'hook_response') {
+          const hookName = event.hook_name || 'unknown';
+          const outcome = event.outcome || 'unknown';
+          const exitCode = event.exit_code !== undefined ? event.exit_code : 0;
+
+          if (outcome === 'success') {
+            logger.info(`✓ Hook completed: ${hookName} (exit code ${exitCode})`);
+          } else {
+            const stderr = event.stderr || '';
+            const errorMsg = stderr.split('\n')[0].substring(0, 100);
+            const msg = `✗ Hook failed: ${hookName} (exit code ${exitCode})${errorMsg ? ' - ' + errorMsg : ''}`;
+            logger.error(msg);
+          }
         }
         break;
 
@@ -582,6 +608,37 @@ class ClaudeRunner {
         }
         break;
     }
+  }
+
+  /**
+   * Format Claude stream-json events for UI display (human-readable)
+   * Returns formatted string for UI, or null to use original JSON
+   * @param {Object} event - Parsed JSON event from Claude CLI
+   * @returns {string|null} Formatted message for UI, or null to use raw JSON
+   */
+  formatEventForUI(event) {
+    // Only format specific event types that need user-friendly display
+    if (event.type === 'system') {
+      if (event.subtype === 'hook_started') {
+        const hookName = event.hook_name || 'unknown';
+        return `Hook started: ${hookName}`;
+      } else if (event.subtype === 'hook_response') {
+        const hookName = event.hook_name || 'unknown';
+        const outcome = event.outcome || 'unknown';
+        const exitCode = event.exit_code !== undefined ? event.exit_code : 0;
+
+        if (outcome === 'success') {
+          return `Hook completed: ${hookName} (exit code ${exitCode})`;
+        } else {
+          const stderr = event.stderr || '';
+          const errorMsg = stderr.split('\n')[0].substring(0, 100);
+          return `Hook failed: ${hookName} (exit code ${exitCode})${errorMsg ? ' - ' + errorMsg : ''}`;
+        }
+      }
+    }
+
+    // Return null for event types we don't format yet (use raw JSON)
+    return null;
   }
 }
 
