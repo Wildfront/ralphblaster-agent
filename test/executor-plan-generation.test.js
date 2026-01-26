@@ -268,7 +268,7 @@ describe('Executor - Plan Generation', () => {
         // Should use process.cwd()
         expect(spawn).toHaveBeenCalledWith(
           'claude',
-          ['--print', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits'],
+          ['--print', '--permission-mode', 'acceptEdits'],
           expect.objectContaining({
             cwd: process.cwd()
           })
@@ -308,7 +308,7 @@ describe('Executor - Plan Generation', () => {
       setTimeout(() => {
         expect(spawn).toHaveBeenCalledWith(
           'claude',
-          ['--print', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits'],
+          ['--print', '--permission-mode', 'acceptEdits'],
           expect.objectContaining({
             cwd: process.cwd()
           })

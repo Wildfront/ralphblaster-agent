@@ -16,7 +16,6 @@ jest.mock('child_process');
 describe('ClaudeRunner', () => {
   let claudeRunner;
   let mockErrorHandler;
-  let mockEventDetector;
   let mockGitHelper;
 
   beforeEach(() => {
@@ -31,23 +30,17 @@ describe('ClaudeRunner', () => {
       }))
     };
 
-    mockEventDetector = {
-      detectAndEmit: jest.fn(),
-      reset: jest.fn()
-    };
-
     mockGitHelper = {
       getCurrentBranch: jest.fn().mockResolvedValue('test-branch')
     };
 
-    claudeRunner = new ClaudeRunner(mockErrorHandler, mockEventDetector, mockGitHelper);
+    claudeRunner = new ClaudeRunner(mockErrorHandler, mockGitHelper);
   });
 
   describe('constructor', () => {
     test('creates instance with dependencies', () => {
       expect(claudeRunner).toBeInstanceOf(ClaudeRunner);
       expect(claudeRunner.errorHandler).toBe(mockErrorHandler);
-      expect(claudeRunner.eventDetector).toBe(mockEventDetector);
       expect(claudeRunner.gitHelper).toBe(mockGitHelper);
     });
 
@@ -223,7 +216,7 @@ describe('ClaudeRunner', () => {
 
       // Simulate successful completion
       setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"result","result":"test output"}\n'));
+        mockProcess.stdout.emit('data', Buffer.from('test output\n'));
         mockProcess.emit('close', 0);
       });
 
@@ -231,7 +224,7 @@ describe('ClaudeRunner', () => {
 
       expect(spawn).toHaveBeenCalledWith(
         'claude',
-        ['--print', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits'],
+        ['--print', '--permission-mode', 'acceptEdits'],
         expect.objectContaining({
           cwd: '/test/dir',
           shell: false
@@ -243,7 +236,7 @@ describe('ClaudeRunner', () => {
       const promise = claudeRunner.runClaude('test prompt', '/test/dir', null, 1000);
 
       setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"result","result":"output"}\n'));
+        mockProcess.stdout.emit('data', Buffer.from('output\n'));
         mockProcess.emit('close', 0);
       });
 
@@ -253,17 +246,18 @@ describe('ClaudeRunner', () => {
       expect(mockProcess.stdin.end).toHaveBeenCalled();
     });
 
-    test('resolves with final result from stream-json', async () => {
+    test('resolves with raw terminal output', async () => {
       const promise = claudeRunner.runClaude('test prompt', '/test/dir', null, 1000);
 
       setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"result","result":"final result text"}\n'));
+        mockProcess.stdout.emit('data', Buffer.from('Reading file.js...\n'));
+        mockProcess.stdout.emit('data', Buffer.from('Writing output...\n'));
         mockProcess.emit('close', 0);
       });
 
       const result = await promise;
 
-      expect(result).toBe('final result text');
+      expect(result).toBe('Reading file.js...\nWriting output...\n');
     });
 
     test('calls onProgress callback with output', async () => {
@@ -271,15 +265,15 @@ describe('ClaudeRunner', () => {
       const promise = claudeRunner.runClaude('test prompt', '/test/dir', onProgress, 1000);
 
       setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"assistant","message":{"content":[{"type":"text","text":"Hello"}]}}\n'));
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"result","result":"done"}\n'));
+        mockProcess.stdout.emit('data', Buffer.from('Hello\n'));
+        mockProcess.stdout.emit('data', Buffer.from('done\n'));
         mockProcess.emit('close', 0);
       });
 
       await promise;
 
-      expect(onProgress).toHaveBeenCalledWith(expect.stringContaining('type":"assistant'));
-      expect(onProgress).toHaveBeenCalledWith(expect.stringContaining('type":"result'));
+      expect(onProgress).toHaveBeenCalledWith('Hello\n');
+      expect(onProgress).toHaveBeenCalledWith('done\n');
     });
 
     test('times out after specified timeout', async () => {
@@ -319,45 +313,13 @@ describe('ClaudeRunner', () => {
       expect(mockErrorHandler.categorizeError).toHaveBeenCalled();
     });
 
-    test('calls detectAndEmit for each JSON line', async () => {
-      claudeRunner.currentJobId = 123;
-      const mockApiClient = {};
-      const promise = claudeRunner.runClaude('test prompt', '/test/dir', null, 1000);
-
-      setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"assistant","message":{"content":[]}}\n'));
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"result","result":"done"}\n'));
-        mockProcess.emit('close', 0);
-      });
-
-      await promise;
-
-      expect(mockEventDetector.detectAndEmit).toHaveBeenCalledTimes(2);
-    });
-
-    test('logs Claude events', async () => {
-      const logClaudeEventSpy = jest.spyOn(claudeRunner, 'logClaudeEvent');
-      const promise = claudeRunner.runClaude('test prompt', '/test/dir', null, 1000);
-
-      setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"system","subtype":"init","model":"claude-3"}\n'));
-        mockProcess.emit('close', 0);
-      });
-
-      await promise;
-
-      expect(logClaudeEventSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'system', subtype: 'init', model: 'claude-3' })
-      );
-    });
-
     test('clears currentProcess on successful completion', async () => {
       const promise = claudeRunner.runClaude('test prompt', '/test/dir', null, 1000);
 
       expect(claudeRunner.currentProcess).toBe(mockProcess);
 
       setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"result","result":"done"}\n'));
+        mockProcess.stdout.emit('data', Buffer.from('done\n'));
         mockProcess.emit('close', 0);
       });
 
@@ -380,52 +342,39 @@ describe('ClaudeRunner', () => {
       expect(claudeRunner.currentProcess).toBeNull();
     });
 
-    test('handles incomplete JSON lines in buffer', async () => {
+    test('concatenates multiple output chunks', async () => {
       const promise = claudeRunner.runClaude('test prompt', '/test/dir', null, 1000);
 
       setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"result",'));
-        mockProcess.stdout.emit('data', Buffer.from('"result":"final"}\n'));
+        mockProcess.stdout.emit('data', Buffer.from('partial output'));
+        mockProcess.stdout.emit('data', Buffer.from(' final\n'));
         mockProcess.emit('close', 0);
       });
 
       const result = await promise;
 
-      expect(result).toBe('final');
+      expect(result).toBe('partial output final\n');
     });
 
-    test('handles non-JSON output gracefully', async () => {
+    test('returns all raw output', async () => {
       const promise = claudeRunner.runClaude('test prompt', '/test/dir', null, 1000);
 
       setImmediate(() => {
         mockProcess.stdout.emit('data', Buffer.from('This is not JSON\n'));
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"result","result":"done"}\n'));
+        mockProcess.stdout.emit('data', Buffer.from('done\n'));
         mockProcess.emit('close', 0);
       });
 
       const result = await promise;
 
-      expect(result).toBe('done');
-    });
-
-    test('falls back to raw stdout if no result event', async () => {
-      const promise = claudeRunner.runClaude('test prompt', '/test/dir', null, 1000);
-
-      setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"assistant","message":{}}\n'));
-        mockProcess.emit('close', 0);
-      });
-
-      const result = await promise;
-
-      expect(result).toContain('type":"assistant');
+      expect(result).toBe('This is not JSON\ndone\n');
     });
 
     test('includes partial output in error', async () => {
       const promise = claudeRunner.runClaude('test prompt', '/test/dir', null, 1000);
 
       setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"assistant","message":{}}\n'));
+        mockProcess.stdout.emit('data', Buffer.from('assistant output\n'));
         mockProcess.stderr.emit('data', Buffer.from('error occurred'));
         mockProcess.emit('close', 1);
       });
@@ -476,7 +425,7 @@ describe('ClaudeRunner', () => {
       const promise = claudeRunner.runClaudeDirectly('/worktree/path', 'prompt', mockJob, null);
 
       setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"result","result":"done"}\n'));
+        mockProcess.stdout.emit('data', Buffer.from('done\n'));
         mockProcess.emit('close', 0);
       });
 
@@ -484,7 +433,7 @@ describe('ClaudeRunner', () => {
 
       expect(spawn).toHaveBeenCalledWith(
         'claude',
-        ['--print', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits'],
+        ['--print', '--permission-mode', 'acceptEdits'],
         expect.objectContaining({
           cwd: '/worktree/path',
           shell: false
@@ -496,14 +445,14 @@ describe('ClaudeRunner', () => {
       const promise = claudeRunner.runClaudeDirectly('/worktree/path', 'prompt', mockJob, null);
 
       setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"result","result":"test result"}\n'));
+        mockProcess.stdout.emit('data', Buffer.from('test result\n'));
         mockProcess.emit('close', 0);
       });
 
       const result = await promise;
 
       expect(result).toEqual({
-        output: 'test result',
+        output: 'test result\n',
         branchName: 'test-branch',
         duration: expect.any(Number)
       });
@@ -515,8 +464,8 @@ describe('ClaudeRunner', () => {
       const promise = claudeRunner.runClaudeDirectly('/worktree/path', 'prompt', mockJob, null);
 
       setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"assistant","message":{}}\n'));
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"result","result":"done"}\n'));
+        mockProcess.stdout.emit('data', Buffer.from('assistant output\n'));
+        mockProcess.stdout.emit('data', Buffer.from('done\n'));
         mockProcess.emit('close', 0);
       });
 
@@ -530,7 +479,7 @@ describe('ClaudeRunner', () => {
       const promise = claudeRunner.runClaudeDirectly('/worktree/path', 'prompt', mockJob, onProgress);
 
       setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"result","result":"done"}\n'));
+        mockProcess.stdout.emit('data', Buffer.from('done\n'));
         mockProcess.emit('close', 0);
       });
 
@@ -545,7 +494,7 @@ describe('ClaudeRunner', () => {
       setImmediate(() => {
         mockProcess.stderr.emit('data', Buffer.from('warning message'));
         mockProcess.stderr.emit('data', Buffer.from(' continued'));
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"result","result":"done"}\n'));
+        mockProcess.stdout.emit('data', Buffer.from('done\n'));
         mockProcess.emit('close', 0);
       });
 
@@ -592,204 +541,13 @@ describe('ClaudeRunner', () => {
       const promise = claudeRunner.runClaudeDirectly('/worktree/path', 'prompt', mockJob, null);
 
       setImmediate(() => {
-        mockProcess.stdout.emit('data', Buffer.from('{"type":"result","result":"done"}\n'));
+        mockProcess.stdout.emit('data', Buffer.from('done\n'));
         mockProcess.emit('close', 0);
       });
 
       await promise;
 
       expect(claudeRunner.currentProcess).toBeNull();
-    });
-  });
-
-  describe('logClaudeEvent()', () => {
-    const logger = require('../src/logger');
-
-    test('logs system init event', () => {
-      const event = {
-        type: 'system',
-        subtype: 'init',
-        model: 'claude-sonnet-3.5'
-      };
-
-      claudeRunner.logClaudeEvent(event);
-
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Claude session started'));
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('claude-sonnet-3.5'));
-    });
-
-    test('logs assistant text message', () => {
-      const event = {
-        type: 'assistant',
-        message: {
-          content: [
-            { type: 'text', text: 'Hello, I will help you' }
-          ]
-        }
-      };
-
-      claudeRunner.logClaudeEvent(event);
-
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Hello, I will help you'));
-    });
-
-    test('logs assistant tool use', () => {
-      const event = {
-        type: 'assistant',
-        message: {
-          content: [
-            {
-              type: 'tool_use',
-              name: 'Read',
-              input: { file_path: '/test/file.js' }
-            }
-          ]
-        }
-      };
-
-      claudeRunner.logClaudeEvent(event);
-
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Read'));
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('file.js'));
-    });
-
-    test('logs tool use with command', () => {
-      const event = {
-        type: 'assistant',
-        message: {
-          content: [
-            {
-              type: 'tool_use',
-              name: 'Bash',
-              input: { command: 'npm install' }
-            }
-          ]
-        }
-      };
-
-      claudeRunner.logClaudeEvent(event);
-
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Bash'));
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('npm install'));
-    });
-
-    test('logs tool use with pattern', () => {
-      const event = {
-        type: 'assistant',
-        message: {
-          content: [
-            {
-              type: 'tool_use',
-              name: 'Grep',
-              input: { pattern: 'function.*test' }
-            }
-          ]
-        }
-      };
-
-      claudeRunner.logClaudeEvent(event);
-
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Grep'));
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('function.*test'));
-    });
-
-    test('truncates long commands', () => {
-      const longCommand = 'a'.repeat(100);
-      const event = {
-        type: 'assistant',
-        message: {
-          content: [
-            {
-              type: 'tool_use',
-              name: 'Bash',
-              input: { command: longCommand }
-            }
-          ]
-        }
-      };
-
-      claudeRunner.logClaudeEvent(event);
-
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('...'));
-    });
-
-    test('logs result success event', () => {
-      const event = {
-        type: 'result',
-        subtype: 'success',
-        duration_ms: 15000,
-        num_turns: 10,
-        total_cost_usd: 0.0542
-      };
-
-      claudeRunner.logClaudeEvent(event);
-
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Completed'));
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('10 turns'));
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('$0.0542'));
-    });
-
-    test('logs result error event', () => {
-      const event = {
-        type: 'result',
-        is_error: true,
-        error: 'Something went wrong'
-      };
-
-      claudeRunner.logClaudeEvent(event);
-
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed'));
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Something went wrong'));
-    });
-
-    test('logs user tool result', () => {
-      const event = {
-        type: 'user',
-        tool_use_result: {
-          file: {
-            filePath: '/test/file.js',
-            numLines: 100
-          }
-        }
-      };
-
-      claudeRunner.logClaudeEvent(event);
-
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('100 lines'));
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('file.js'));
-    });
-
-    test('logs text tool result', () => {
-      const event = {
-        type: 'user',
-        tool_use_result: {
-          type: 'text',
-          output: 'line1\nline2\nline3'
-        }
-      };
-
-      claudeRunner.logClaudeEvent(event);
-
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('3 lines'));
-    });
-
-    test('handles missing cost in result', () => {
-      const event = {
-        type: 'result',
-        subtype: 'success',
-        duration_ms: 1000,
-        num_turns: 5
-      };
-
-      claudeRunner.logClaudeEvent(event);
-
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('$0.00'));
-    });
-
-    test('handles events without expected fields', () => {
-      const event = { type: 'unknown' };
-
-      expect(() => claudeRunner.logClaudeEvent(event)).not.toThrow();
     });
   });
 
