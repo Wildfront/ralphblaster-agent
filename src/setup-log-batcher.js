@@ -1,117 +1,107 @@
 /**
- * Batches setup logs to reduce API call overhead
- * Automatically flushes when buffer is full or at regular intervals
- * Note: Does not use logger module to avoid circular dependency
+ * @deprecated This class is deprecated. Use ApiDestination from src/logging/destinations instead.
+ *
+ * SetupLogBatcher - Legacy batching implementation
+ *
+ * This class is maintained for backward compatibility but wraps the new
+ * BatchedDestination and ApiDestinationUnbatched implementations internally.
+ *
+ * Migration guide:
+ * ```javascript
+ * // Old:
+ * const SetupLogBatcher = require('./setup-log-batcher');
+ * const batcher = new SetupLogBatcher(apiClient, jobId, config);
+ * batcher.add('info', 'message', metadata);
+ * await batcher.shutdown();
+ *
+ * // New:
+ * const { ApiDestination } = require('./logging/destinations');
+ * const destination = new ApiDestination({ apiClient, jobId, ...config });
+ * await destination.write('info', 'message', metadata);
+ * await destination.close();
+ * ```
+ *
+ * Configuration values are typically provided from src/logging/config.js
  */
+
+const BatchedDestination = require('./logging/destinations/batched-destination');
+const ApiDestinationUnbatched = require('./logging/destinations/api-destination-unbatched');
+
 class SetupLogBatcher {
+  /**
+   * Create a new SetupLogBatcher instance
+   * @param {Object} apiClient - API client instance with addSetupLog() and optionally addSetupLogBatch() methods
+   * @param {number} jobId - Job ID to associate logs with
+   * @param {Object} [config] - Configuration options
+   * @param {number} [config.maxBatchSize=10] - Maximum number of logs to buffer before flushing
+   * @param {number} [config.flushInterval=2000] - Interval in ms to automatically flush buffered logs
+   * @param {boolean} [config.useBatchEndpoint=true] - Whether to try batch endpoint first before falling back to individual sends
+   */
   constructor(apiClient, jobId, config = {}) {
+    // Store for backward compatibility
     this.apiClient = apiClient;
     this.jobId = jobId;
-    this.buffer = [];
-
-    // Configuration
     this.maxBatchSize = config.maxBatchSize || 10;
-    this.flushInterval = config.flushInterval || 2000; // 2 seconds
-    this.useBatchEndpoint = config.useBatchEndpoint !== false; // Default true
-
-    // Start automatic flush timer
-    this.flushTimer = setInterval(() => this.flush(), this.flushInterval);
-
-    // Track if we're shutting down
+    this.flushInterval = config.flushInterval || 2000;
+    this.useBatchEndpoint = config.useBatchEndpoint !== false;
     this.isShuttingDown = false;
+
+    // Use the new destination-based implementation internally
+    const unbatchedDestination = new ApiDestinationUnbatched({
+      apiClient,
+      jobId,
+      useBatchEndpoint: this.useBatchEndpoint
+    });
+
+    this._destination = new BatchedDestination(unbatchedDestination, {
+      maxBatchSize: this.maxBatchSize,
+      flushInterval: this.flushInterval,
+      useBatchSend: this.useBatchEndpoint
+    });
   }
 
   /**
    * Add a log entry to the buffer
+   * If buffer is full (reaches maxBatchSize), automatically flushes.
+   * If shutting down, sends immediately without batching.
    * @param {string} level - Log level ('info' or 'error')
    * @param {string} message - Log message
-   * @param {Object} metadata - Optional structured metadata (Phase 3)
+   * @param {Object} [metadata=null] - Optional structured metadata for filtering/searching
    */
   add(level, message, metadata = null) {
-    if (this.isShuttingDown) {
-      // If shutting down, send immediately without batching
-      this.apiClient.addSetupLog(this.jobId, level, message, metadata).catch(() => {});
-      return;
-    }
-
-    const logEntry = {
-      timestamp: new Date().toISOString(),
-      level: level,
-      message: message
-    };
-
-    // Add metadata if present (Phase 3)
-    if (metadata && Object.keys(metadata).length > 0) {
-      logEntry.metadata = metadata;
-    }
-
-    this.buffer.push(logEntry);
-
-    // Flush if buffer is full
-    if (this.buffer.length >= this.maxBatchSize) {
-      this.flush();
-    }
+    // Delegate to the new destination implementation
+    this._destination.write(level, message, metadata || {}).catch(() => {
+      // Silently fail to maintain backward compatibility
+    });
   }
 
   /**
    * Flush buffered logs to API
-   * Tries batch endpoint first, falls back to individual sends
+   * Tries batch endpoint first (if available), falls back to individual sends on error.
+   * Safe to call when buffer is empty (no-op).
+   * @returns {Promise<void>}
    */
   async flush() {
-    if (this.buffer.length === 0) return;
-
-    const batch = [...this.buffer];
-    this.buffer = [];
-
-    try {
-      if (this.useBatchEndpoint && this.apiClient.addSetupLogBatch) {
-        // Try batch endpoint (more efficient)
-        await this.apiClient.addSetupLogBatch(this.jobId, batch);
-      } else {
-        // Fall back to individual sends
-        await this.sendIndividually(batch);
-      }
-    } catch (error) {
-      // If batch endpoint fails, try individual sends as fallback
-      await this.sendIndividually(batch);
-    }
-  }
-
-  /**
-   * Send logs individually (fallback method)
-   * @param {Array} logs - Array of log entries
-   */
-  async sendIndividually(logs) {
-    const promises = logs.map(log =>
-      this.apiClient.addSetupLog(this.jobId, log.level, log.message, log.metadata)
-        .catch(() => {}) // Silently fail individual logs
-    );
-
-    await Promise.all(promises);
+    await this._destination.flush();
   }
 
   /**
    * Shutdown the batcher and flush remaining logs
-   * Call this when job completes
+   * Stops the automatic flush timer and ensures all buffered logs are sent.
+   * Call this when job completes to prevent log loss.
+   * @returns {Promise<void>}
    */
   async shutdown() {
     this.isShuttingDown = true;
-
-    // Stop automatic flush timer
-    if (this.flushTimer) {
-      clearInterval(this.flushTimer);
-      this.flushTimer = null;
-    }
-
-    // Flush any remaining logs
-    await this.flush();
+    await this._destination.close();
   }
 
   /**
    * Get current buffer size (for testing/debugging)
+   * @returns {number} Number of logs currently buffered
    */
   getBufferSize() {
-    return this.buffer.length;
+    return this._destination.getBufferSize();
   }
 }
 
