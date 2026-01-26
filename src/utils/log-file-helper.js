@@ -10,11 +10,20 @@ const path = require('path');
 class LogFileHelper {
   /**
    * Creates a job log file with standard header format using write streams
+   * Recommended for real-time streaming of long-running job outputs (e.g., LLM streaming).
+   * Creates .ralph-logs directory if it doesn't exist.
    * @param {string} workingDir - Working directory where logs should be created
-   * @param {Object} job - Job object containing id and task_title
-   * @param {number} startTime - Job start timestamp
+   * @param {Object} job - Job object containing id and task_title properties
+   * @param {number} startTime - Job start timestamp (milliseconds since epoch)
    * @param {string} jobType - Type of job (e.g., 'PRD Generation', 'Plan Generation', 'Clarifying Questions Generation')
-   * @returns {Promise<{logFile: string, logStream: WriteStream}>} Path and stream for the created log file
+   * @returns {Promise<{logFile: string, logStream: WriteStream}>} Object with logFile path and logStream for writing
+   * @example
+   *   const { logFile, logStream } = await LogFileHelper.createJobLogStream(
+   *     '/path/to/work',
+   *     { id: 123, task_title: 'Generate PRD' },
+   *     Date.now(),
+   *     'PRD Generation'
+   *   );
    */
   static async createJobLogStream(workingDir, job, startTime, jobType) {
     // Create .ralph-logs directory
@@ -41,12 +50,23 @@ Started: ${new Date(startTime).toISOString()}
 
   /**
    * Creates a job log file with standard header format using fsPromises (for code-execution.js)
+   * Recommended for jobs with complete output available upfront (non-streaming).
+   * Writes header, content, and footer in a single operation.
+   * Creates .ralph-logs directory if it doesn't exist.
    * @param {string} workingDir - Working directory where logs should be created
-   * @param {Object} job - Job object containing id and task_title
-   * @param {number} startTime - Job start timestamp
+   * @param {Object} job - Job object containing id and task_title properties
+   * @param {number} startTime - Job start timestamp (milliseconds since epoch)
    * @param {string} jobType - Type of job (e.g., 'Code Execution')
-   * @param {string} content - Full content to write (including header and body)
+   * @param {string} content - Full content to write (body only, header/footer added automatically)
    * @returns {Promise<string>} Path to the created log file
+   * @example
+   *   const logFile = await LogFileHelper.createJobLogWithContent(
+   *     '/path/to/work',
+   *     { id: 123, task_title: 'Execute code' },
+   *     Date.now(),
+   *     'Code Execution',
+   *     'Output:\nHello World'
+   *   );
    */
   static async createJobLogWithContent(workingDir, job, startTime, jobType, content) {
     // Create .ralph-logs directory
@@ -75,9 +95,14 @@ Execution completed at: ${new Date().toISOString()}
 
   /**
    * Writes a completion footer to a write stream
+   * Call this when job completes to add a formatted completion timestamp and optional metadata.
    * @param {WriteStream} logStream - Write stream for the log file
    * @param {string} jobType - Type of job (e.g., 'PRD Generation')
-   * @param {Object} metadata - Optional metadata to include in footer (e.g., questionCount)
+   * @param {Object} [metadata={}] - Optional metadata to include in footer
+   * @param {number} [metadata.questionCount] - Number of questions generated (if applicable)
+   * @example
+   *   LogFileHelper.writeCompletionFooterToStream(logStream, 'PRD Generation', { questionCount: 5 });
+   *   logStream.end();
    */
   static writeCompletionFooterToStream(logStream, jobType, metadata = {}) {
     let footer = `
@@ -98,10 +123,15 @@ ${jobType} completed at: ${new Date().toISOString()}`;
 
   /**
    * Writes a completion footer to the log file using fsPromises
+   * Call this when job completes to add a formatted completion timestamp and optional metadata.
+   * Uses append operation, safe to call after file has been written.
    * @param {string} logFile - Path to the log file
    * @param {string} jobType - Type of job (e.g., 'Plan Generation')
-   * @param {Object} metadata - Optional metadata to include in footer (e.g., questionCount)
+   * @param {Object} [metadata={}] - Optional metadata to include in footer
+   * @param {number} [metadata.questionCount] - Number of questions generated (if applicable)
    * @returns {Promise<void>}
+   * @example
+   *   await LogFileHelper.writeCompletionFooter(logFile, 'Plan Generation', { questionCount: 3 });
    */
   static async writeCompletionFooter(logFile, jobType, metadata = {}) {
     let footer = `
@@ -122,13 +152,25 @@ ${jobType} completed at: ${new Date().toISOString()}`;
 
   /**
    * Creates a wrapper function for progress callbacks that also logs to a write stream
+   * Use for real-time streaming operations (e.g., LLM responses).
+   * The returned callback writes each chunk to the log stream while calling the original callback.
+   * Includes totalChunks property for tracking progress.
    * @param {WriteStream} logStream - Write stream for the log file
-   * @param {Function} onProgress - Original progress callback
-   * @param {Function} logger - Logger instance for warnings
-   * @param {Object} options - Optional configuration
-   * @param {number} options.logFrequency - How often to log progress (default: every 50 chunks)
-   * @param {string} options.progressMessage - Custom progress message prefix
-   * @returns {Function} Wrapped progress callback with totalChunks tracker
+   * @param {Function} [onProgress] - Original progress callback (optional)
+   * @param {Object} logger - Logger instance for warnings (must have .warn() method)
+   * @param {Object} [options={}] - Optional configuration
+   * @param {number} [options.logFrequency=50] - How often to log progress (default: every 50 chunks)
+   * @param {string} [options.progressMessage='Progress'] - Custom progress message prefix
+   * @returns {Function} Wrapped progress callback with totalChunks property
+   * @example
+   *   const callback = LogFileHelper.createLogAndProgressCallbackStream(
+   *     logStream,
+   *     (chunk) => console.log(chunk),
+   *     logger,
+   *     { logFrequency: 100 }
+   *   );
+   *   await streamResponse(callback);
+   *   console.log(`Total chunks: ${callback.totalChunks}`);
    */
   static createLogAndProgressCallbackStream(logStream, onProgress, logger, options = {}) {
     const logFrequency = options.logFrequency || 50;
@@ -166,13 +208,24 @@ ${jobType} completed at: ${new Date().toISOString()}`;
 
   /**
    * Creates a wrapper function for progress callbacks that also logs to file using fsPromises
+   * Use when write streams aren't available or for simpler file append operations.
+   * The returned callback appends each chunk to the log file while calling the original callback.
+   * Includes totalChunks property for tracking progress.
    * @param {string} logFile - Path to the log file
-   * @param {Function} onProgress - Original progress callback
-   * @param {Function} logger - Logger instance for warnings
-   * @param {Object} options - Optional configuration
-   * @param {number} options.logFrequency - How often to log progress (default: every 50 chunks)
-   * @param {string} options.progressMessage - Custom progress message prefix
-   * @returns {Function} Wrapped progress callback
+   * @param {Function} [onProgress] - Original progress callback (optional)
+   * @param {Object} logger - Logger instance for warnings (must have .warn() method)
+   * @param {Object} [options={}] - Optional configuration
+   * @param {number} [options.logFrequency=50] - How often to log progress (default: every 50 chunks)
+   * @param {string} [options.progressMessage='Progress'] - Custom progress message prefix
+   * @returns {Function} Wrapped progress callback with totalChunks property
+   * @example
+   *   const callback = LogFileHelper.createLogAndProgressCallback(
+   *     '/path/to/log.txt',
+   *     (chunk) => process.stdout.write(chunk),
+   *     logger
+   *   );
+   *   await streamResponse(callback);
+   *   console.log(`Total chunks: ${callback.totalChunks}`);
    */
   static createLogAndProgressCallback(logFile, onProgress, logger, options = {}) {
     const logFrequency = options.logFrequency || 50;
