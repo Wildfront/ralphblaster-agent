@@ -16,7 +16,33 @@
 
 ## Overview
 
-Ralph Blaster Agent uses a comprehensive logging system designed for production environments. The logging architecture provides:
+Ralph Blaster Agent has **three distinct logging systems**, each serving a different purpose:
+
+### 1. **Instance Setup Logs** (This Document)
+Application-level structured logging for debugging and monitoring agent operations.
+- Logs from application code (`logger.info()`, `logger.error()`)
+- Batched to API for UI display
+- Supports structured metadata, child loggers, performance tracking
+- **This is what this document describes**
+
+### 2. **Live Progress**
+Real-time terminal output from Claude CLI execution, streamed directly to UI.
+- Shows raw `claude` terminal output (exactly what you'd see locally)
+- No parsing, no formatting, no event detection
+- For watching Claude work in real-time
+
+### 3. **Activity Timeline**
+High-level milestone tracking with progress percentages for UI status display.
+- Major phases: "Setting up workspace", "Claude started", "Finalizing"
+- Progress percentages: 5%, 10%, 15%, 95%, 100%
+- Heartbeats every 60s with elapsed time
+- For quick status overview without reading terminal output
+
+See [LOGGING_SIMPLIFICATION.md](./LOGGING_SIMPLIFICATION.md) for detailed comparison.
+
+---
+
+Ralph Blaster Agent uses a comprehensive logging system designed for production environments. The **Instance Setup Logs** architecture provides:
 
 - **Multiple log levels** (error, warn, info, debug) for granular control
 - **Structured logging** with metadata for machine-readable logs
