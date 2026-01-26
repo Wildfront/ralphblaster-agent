@@ -5,7 +5,6 @@ const logger = require('../logger');
 const { formatDuration } = require('../utils/format');
 const { validatePrompt } = require('./prompt-validator');
 const { categorizeError } = require('./error-handler');
-const EventDetector = require('./event-detector');
 const GitHelper = require('./git-helper');
 const ClaudeRunner = require('./claude-runner');
 const PathHelper = require('./path-helper');
@@ -21,12 +20,11 @@ const TIMEOUTS = {
 class Executor {
   constructor(apiClient = null) {
     this.apiClient = apiClient; // Optional API client for metadata updates
-    this.eventDetector = new EventDetector(); // Event detector for progress tracking
     this.gitHelper = new GitHelper(); // Git operations helper
 
     // Create ClaudeRunner with dependencies
     const errorHandler = { categorizeError };
-    this.claudeRunner = new ClaudeRunner(errorHandler, this.eventDetector, this.gitHelper);
+    this.claudeRunner = new ClaudeRunner(errorHandler, this.gitHelper);
     this.claudeRunner.setApiClient(apiClient);
 
     // Create shared validators and helpers
@@ -91,11 +89,10 @@ class Executor {
   async execute(job, onProgress) {
     const startTime = Date.now();
 
-    // Store job ID for event emission and reset event detector state
+    // Store job ID for progress tracking
     this.currentJobId = job.id;
-    this.eventDetector.reset();
 
-    // Set job ID in ClaudeRunner for event emission
+    // Set job ID in ClaudeRunner for progress tracking
     this.claudeRunner.setJobId(job.id);
 
     // Display human-friendly job description
