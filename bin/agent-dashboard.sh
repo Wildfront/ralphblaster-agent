@@ -47,7 +47,7 @@ show_agent_status() {
     fi
 
     # Check for multiple agents
-    local all_agents=$(pgrep -f "ralph-agent.js" | wc -l)
+    local all_agents=$(pgrep -f "ralphblaster.js" | wc -l)
     if [ "$all_agents" -gt 1 ]; then
         echo -e "  ${YELLOW}⚠${NC}  Warning: ${all_agents} agent processes detected!"
     fi
