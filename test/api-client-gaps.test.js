@@ -227,7 +227,7 @@ describe('ApiClient - Coverage Gaps', () => {
       await apiClient.sendProgress(123, 'Progress chunk');
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/123/progress',
+        '/api/v1/ralphblaster/jobs/123/progress',
         { chunk: 'Progress chunk' }
       );
     });
@@ -262,7 +262,7 @@ describe('ApiClient - Coverage Gaps', () => {
       await apiClient.sendStatusEvent(123, 'setup_started', 'Setting up...');
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/123/events',
+        '/api/v1/ralphblaster/jobs/123/events',
         {
           event_type: 'setup_started',
           message: 'Setting up...',
@@ -326,7 +326,7 @@ describe('ApiClient - Coverage Gaps', () => {
       await apiClient.updateJobMetadata(123, { worktree_path: '/path/to/worktree' });
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/123/metadata',
+        '/api/v1/ralphblaster/jobs/123/metadata',
         {
           metadata: { worktree_path: '/path/to/worktree' }
         }

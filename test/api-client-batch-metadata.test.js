@@ -52,7 +52,7 @@ describe('ApiClient - Batch Operations and Metadata Validation', () => {
       await apiClient.addSetupLogBatch(123, logs);
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/123/setup_logs',
+        '/api/v1/ralphblaster/jobs/123/setup_logs',
         { logs: logs },
         { timeout: 30000 } // 30s timeout for batch operations
       );
@@ -131,7 +131,7 @@ describe('ApiClient - Batch Operations and Metadata Validation', () => {
       await apiClient.updateJobMetadata(123, validMetadata);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/123/metadata',
+        '/api/v1/ralphblaster/jobs/123/metadata',
         { metadata: validMetadata }
       );
       expect(logger.debug).toHaveBeenCalledWith(
@@ -184,7 +184,7 @@ describe('ApiClient - Batch Operations and Metadata Validation', () => {
       await apiClient.updateJobMetadata(123, {});
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/123/metadata',
+        '/api/v1/ralphblaster/jobs/123/metadata',
         { metadata: {} }
       );
     });

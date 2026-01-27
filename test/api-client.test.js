@@ -28,6 +28,7 @@ describe('ApiClient', () => {
     // Create mock axios instance with interceptors
     mockAxiosInstance = {
       get: jest.fn(),
+      post: jest.fn(),
       patch: jest.fn(),
       interceptors: {
         request: {
@@ -50,7 +51,7 @@ describe('ApiClient', () => {
       const result = await apiClient.getNextJob();
 
       expect(result).toBeNull();
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/ralph/jobs/next', {
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/next', {
         params: { timeout: 30 },
         timeout: 35000  // Updated to 30s + 5s buffer = 35s
       });
@@ -153,7 +154,7 @@ describe('ApiClient', () => {
 
       await apiClient.markJobRunning(1);
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralph/jobs/1', {
+      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/1', {
         status: 'running'
       });
     });
@@ -177,7 +178,7 @@ describe('ApiClient', () => {
 
       await apiClient.markJobCompleted(1, result);
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralph/jobs/1', {
+      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/1', {
         status: 'completed',
         output: 'Output text',
         execution_time_ms: 1000,
@@ -197,7 +198,7 @@ describe('ApiClient', () => {
 
       await apiClient.markJobCompleted(1, result);
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralph/jobs/1', {
+      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/1', {
         status: 'completed',
         output: 'Output text',
         execution_time_ms: 2000,
@@ -220,7 +221,7 @@ describe('ApiClient', () => {
 
       await apiClient.markJobFailed(1, 'Error message', 'Partial output');
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralph/jobs/1', {
+      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/1', {
         status: 'failed',
         error: 'Error message',
         output: 'Partial output'
@@ -241,7 +242,7 @@ describe('ApiClient', () => {
 
       await apiClient.sendHeartbeat(1);
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralph/jobs/1', {
+      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/1', {
         status: 'running',
         heartbeat: true
       });
@@ -251,6 +252,101 @@ describe('ApiClient', () => {
       mockAxiosInstance.patch.mockRejectedValue(new Error('API error'));
 
       await expect(apiClient.sendHeartbeat(1)).resolves.toBeUndefined();
+    });
+  });
+
+  describe('API endpoint fallback', () => {
+    test('uses new endpoints by default', async () => {
+      mockAxiosInstance.get.mockResolvedValue({ status: 204 });
+
+      await apiClient.getNextJob();
+
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/next', expect.any(Object));
+    });
+
+    test('falls back to old endpoints on 404', async () => {
+      // First call fails with 404 (new endpoint not found)
+      mockAxiosInstance.get
+        .mockRejectedValueOnce({
+          response: { status: 404 }
+        })
+        // Second call succeeds (old endpoint works)
+        .mockResolvedValueOnce({ status: 204 });
+
+      await apiClient.getNextJob();
+
+      // Should have tried both endpoints
+      expect(mockAxiosInstance.get).toHaveBeenCalledTimes(2);
+      expect(mockAxiosInstance.get).toHaveBeenNthCalledWith(1, '/api/v1/ralphblaster/jobs/next', expect.any(Object));
+      expect(mockAxiosInstance.get).toHaveBeenNthCalledWith(2, '/api/v1/ralph/jobs/next', expect.any(Object));
+    });
+
+    test('continues using old endpoints after fallback', async () => {
+      // First call triggers fallback
+      mockAxiosInstance.get
+        .mockRejectedValueOnce({ response: { status: 404 } })
+        .mockResolvedValueOnce({ status: 204 })
+        // Subsequent calls should use old endpoint
+        .mockResolvedValueOnce({ status: 204 });
+
+      await apiClient.getNextJob(); // Triggers fallback
+      await apiClient.getNextJob(); // Should use old endpoint
+
+      expect(mockAxiosInstance.get).toHaveBeenCalledTimes(3);
+      expect(mockAxiosInstance.get).toHaveBeenNthCalledWith(3, '/api/v1/ralph/jobs/next', expect.any(Object));
+    });
+
+    test('does not fall back on non-404 errors', async () => {
+      mockAxiosInstance.patch.mockRejectedValue({
+        response: { status: 500 }
+      });
+
+      await expect(apiClient.markJobRunning(1)).rejects.toMatchObject({
+        response: { status: 500 }
+      });
+
+      // Should only try once (no fallback)
+      expect(mockAxiosInstance.patch).toHaveBeenCalledTimes(1);
+    });
+
+    test('fallback works for POST requests', async () => {
+      mockAxiosInstance.post
+        .mockRejectedValueOnce({ response: { status: 404 } })
+        .mockResolvedValueOnce({ data: { success: true } });
+
+      await apiClient.sendStatusEvent(1, 'test_event', 'Test message');
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledTimes(2);
+      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(
+        1,
+        '/api/v1/ralphblaster/jobs/1/events',
+        expect.any(Object)
+      );
+      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(
+        2,
+        '/api/v1/ralph/jobs/1/events',
+        expect.any(Object)
+      );
+    });
+
+    test('fallback works for PATCH requests', async () => {
+      mockAxiosInstance.patch
+        .mockRejectedValueOnce({ response: { status: 404 } })
+        .mockResolvedValueOnce({});
+
+      await apiClient.markJobRunning(1);
+
+      expect(mockAxiosInstance.patch).toHaveBeenCalledTimes(2);
+      expect(mockAxiosInstance.patch).toHaveBeenNthCalledWith(
+        1,
+        '/api/v1/ralphblaster/jobs/1',
+        expect.any(Object)
+      );
+      expect(mockAxiosInstance.patch).toHaveBeenNthCalledWith(
+        2,
+        '/api/v1/ralph/jobs/1',
+        expect.any(Object)
+      );
     });
   });
 });

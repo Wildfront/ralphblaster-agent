@@ -230,7 +230,7 @@ describe('ApiClient Edge Cases', () => {
       await apiClient.markJobCompleted(123, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/123',
+        '/api/v1/ralphblaster/jobs/123',
         {
           status: 'completed',
           output: 'PRD output',
@@ -256,7 +256,7 @@ describe('ApiClient Edge Cases', () => {
       await apiClient.markJobCompleted(456, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/456',
+        '/api/v1/ralphblaster/jobs/456',
         {
           status: 'completed',
           output: 'Code output',
@@ -282,7 +282,7 @@ describe('ApiClient Edge Cases', () => {
       await apiClient.markJobCompleted(789, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/789',
+        '/api/v1/ralphblaster/jobs/789',
         {
           status: 'completed',
           output: 'Output only',
@@ -308,7 +308,7 @@ describe('ApiClient Edge Cases', () => {
       await apiClient.markJobCompleted(999, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/999',
+        '/api/v1/ralphblaster/jobs/999',
         {
           status: 'completed',
           output: 'Full output',
@@ -342,7 +342,7 @@ describe('ApiClient Edge Cases', () => {
       await apiClient.markJobFailed(123, 'Error occurred', null);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/123',
+        '/api/v1/ralphblaster/jobs/123',
         {
           status: 'failed',
           error: 'Error occurred',
@@ -364,7 +364,7 @@ describe('ApiClient Edge Cases', () => {
       );
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/456',
+        '/api/v1/ralphblaster/jobs/456',
         {
           status: 'failed',
           error: 'Execution failed',
