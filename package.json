@@ -1,10 +1,10 @@
 {
   "name": "ralphblaster",
   "version": "1.4.1",
-  "description": "Ralph agent that polls for and executes coding jobs via Claude CLI",
+  "description": "RalphBlaster agent that polls for and executes coding jobs via Claude CLI",
   "main": "src/index.js",
   "bin": {
-    "ralphblaster": "bin/ralph-agent.js"
+    "ralphblaster": "bin/ralphblaster.js"
   },
   "files": [
     "bin/",
@@ -14,9 +14,9 @@
     "README.md"
   ],
   "scripts": {
-    "start": "node bin/ralph-agent.js",
-    "start:multi": "node bin/ralph-agent.js --agents=3",
-    "start:multi:5": "node bin/ralph-agent.js --agents=5",
+    "start": "node bin/ralphblaster.js",
+    "start:multi": "node bin/ralphblaster.js --agents=3",
+    "start:multi:5": "node bin/ralphblaster.js --agents=5",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
