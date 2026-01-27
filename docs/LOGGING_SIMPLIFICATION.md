@@ -10,7 +10,7 @@
 
 ### 1. Instance Setup Logs
 **Purpose:** Server-side structured logs for debugging and monitoring
-**Destination:** API endpoint `/api/v1/ralph/jobs/:id/setup_log`
+**Destination:** API endpoint `/api/v1/ralphblaster/jobs/:id/setup_log`
 **Content:**
 - `logger.info()` and `logger.error()` calls from application code
 - Job lifecycle: "Job started", "Marking as completed", "Flushing logs"
@@ -23,7 +23,7 @@
 
 ### 2. Live Progress ✨ (SIMPLIFIED)
 **Purpose:** Real-time terminal output from Claude CLI execution
-**Destination:** API endpoint `/api/v1/ralph/jobs/:id/progress`
+**Destination:** API endpoint `/api/v1/ralphblaster/jobs/:id/progress`
 **Content:** Raw terminal output exactly as you'd see running `claude` locally
 
 ```
@@ -49,7 +49,7 @@ Committing changes...
 
 ### 3. Activity Timeline 📊
 **Purpose:** High-level milestone tracking with progress percentages
-**Destination:** API endpoint `/api/v1/ralph/jobs/:id/events`
+**Destination:** API endpoint `/api/v1/ralphblaster/jobs/:id/events`
 **Content:** Major execution milestones
 
 ```

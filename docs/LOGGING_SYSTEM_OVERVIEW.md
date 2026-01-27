@@ -9,7 +9,7 @@ Ralph Blaster Agent uses three separate logging systems, each optimized for a sp
 
 **Source:** Application code via `logger.info()`, `logger.error()`, etc.
 
-**Destination:** API endpoint `/api/v1/ralph/jobs/:id/setup_log` (batched)
+**Destination:** API endpoint `/api/v1/ralphblaster/jobs/:id/setup_log` (batched)
 
 **What it logs:**
 - Job lifecycle events ("Job started", "Marking as completed")
@@ -36,7 +36,7 @@ Ralph Blaster Agent uses three separate logging systems, each optimized for a sp
 
 **Source:** Raw stdout from `claude` CLI process
 
-**Destination:** API endpoint `/api/v1/ralph/jobs/:id/progress` (streamed)
+**Destination:** API endpoint `/api/v1/ralphblaster/jobs/:id/progress` (streamed)
 
 **What it shows:**
 ```
@@ -77,7 +77,7 @@ spawn('claude', ['--print', '--permission-mode', 'acceptEdits'])
 
 **Source:** Application code via `apiClient.sendStatusEvent()`
 
-**Destination:** API endpoint `/api/v1/ralph/jobs/:id/events`
+**Destination:** API endpoint `/api/v1/ralphblaster/jobs/:id/events`
 
 **What it shows:**
 ```
@@ -252,11 +252,11 @@ await this.apiClient.sendStatusEvent(
 
 ### Instance Setup Logs
 ```bash
-export RALPH_LOG_LEVEL=debug           # error|warn|info|debug
-export RALPH_CONSOLE_FORMAT=pretty     # pretty|json
-export RALPH_CONSOLE_COLORS=true       # true|false
-export RALPH_MAX_BATCH_SIZE=10         # Logs to batch
-export RALPH_FLUSH_INTERVAL=2000       # Flush interval (ms)
+export RALPHBLASTER_LOG_LEVEL=debug           # error|warn|info|debug
+export RALPHBLASTER_CONSOLE_FORMAT=pretty     # pretty|json
+export RALPHBLASTER_CONSOLE_COLORS=true       # true|false
+export RALPHBLASTER_MAX_BATCH_SIZE=10         # Logs to batch
+export RALPHBLASTER_FLUSH_INTERVAL=2000       # Flush interval (ms)
 ```
 
 ### Live Progress

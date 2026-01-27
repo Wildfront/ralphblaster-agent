@@ -1,11 +1,11 @@
 ---
-name: ralph
-description: "Convert PRDs to prd.json format for the Ralph autonomous agent system. Use when you have an existing PRD and need to convert it to Ralph's JSON format. Triggers on: convert this prd, turn this into ralph format, create prd.json from this, ralph json."
+name: ralphblaster
+description: "Convert PRDs to prd.json format for the RalphBlasterBlaster autonomous agent system. Use when you have an existing PRD and need to convert it to RalphBlasterBlaster's JSON format. Triggers on: convert this prd, turn this into ralphblaster format, create prd.json from this, ralphblaster json."
 ---
 
-# Ralph PRD Converter
+# RalphBlasterBlaster PRD Converter
 
-Converts existing PRDs to the prd.json format that Ralph uses for autonomous execution.
+Converts existing PRDs to the prd.json format that RalphBlasterBlaster uses for autonomous execution.
 
 ---
 
@@ -22,7 +22,7 @@ Take a PRD (markdown file or text) and convert it to `prd.json` format.
 ```json
 {
   "project": "[Project Name]",
-  "branchName": "ralph/[feature-name-kebab-case]",
+  "branchName": "ralphblaster/[feature-name-kebab-case]",
   "description": "[Feature description from PRD title/intro]",
   "userStories": [
     {
@@ -46,9 +46,9 @@ Take a PRD (markdown file or text) and convert it to `prd.json` format.
 
 ## Story Size: The Number One Rule
 
-**Each story must be completable in ONE Ralph iteration (one context window).**
+**Each story must be completable in ONE RalphBlaster iteration (one context window).**
 
-Ralph spawns a fresh Amp instance per iteration with no memory of previous work. If a story is too big, the LLM runs out of context before finishing and produces broken code.
+RalphBlaster spawns a fresh Amp instance per iteration with no memory of previous work. If a story is too big, the LLM runs out of context before finishing and produces broken code.
 
 ### Right-sized stories:
 - Add a database column and migration
@@ -83,7 +83,7 @@ Stories execute in priority order. Earlier stories must not depend on later ones
 
 ## Acceptance Criteria: Must Be Verifiable
 
-Each criterion must be something Ralph can CHECK, not something vague.
+Each criterion must be something RalphBlaster can CHECK, not something vague.
 
 ### Good criteria (verifiable):
 - "Add `status` column to tasks table with default 'pending'"
@@ -113,7 +113,7 @@ For stories with testable logic, also include:
 "Verify in browser using dev-browser skill"
 ```
 
-Frontend stories are NOT complete until visually verified. Ralph will use the dev-browser skill to navigate to the page, interact with the UI, and confirm changes work.
+Frontend stories are NOT complete until visually verified. RalphBlaster will use the dev-browser skill to navigate to the page, interact with the UI, and confirm changes work.
 
 ---
 
@@ -123,7 +123,7 @@ Frontend stories are NOT complete until visually verified. Ralph will use the de
 2. **IDs**: Sequential (US-001, US-002, etc.)
 3. **Priority**: Based on dependency order, then document order
 4. **All stories**: `passes: false` and empty `notes`
-5. **branchName**: Derive from feature name, kebab-case, prefixed with `ralph/`
+5. **branchName**: Derive from feature name, kebab-case, prefixed with `ralphblaster/`
 6. **Always add**: "Typecheck passes" to every story's acceptance criteria
 
 ---
@@ -166,7 +166,7 @@ Add ability to mark tasks with different statuses.
 ```json
 {
   "project": "TaskApp",
-  "branchName": "ralph/task-status",
+  "branchName": "ralphblaster/task-status",
   "description": "Task Status Feature - Track task progress with status indicators",
   "userStories": [
     {
