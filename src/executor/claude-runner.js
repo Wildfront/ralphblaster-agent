@@ -72,6 +72,7 @@ class ClaudeRunner {
     // Explicitly blocked patterns (even if they match allowed vars)
     const blockedPatterns = [
       /^RALPH_API_TOKEN$/i,
+      /^RALPHBLASTER_API_TOKEN$/i,
       /^.*_TOKEN$/i,
       /^.*_SECRET$/i,
       /^.*_KEY$/i,

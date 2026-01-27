@@ -11,6 +11,7 @@ const PathHelper = require('./path-helper');
 const PrdGenerationHandler = require('./job-handlers/prd-generation');
 const CodeExecutionHandler = require('./job-handlers/code-execution');
 const ClarifyingQuestionsHandler = require('./job-handlers/clarifying-questions');
+const { getEnv } = require('../utils/env-compat');
 
 // Timeout constants
 const TIMEOUTS = {
@@ -260,8 +261,9 @@ class Executor {
       }
 
       // Check if path is within allowed base paths (if configured)
-      const allowedBasePaths = process.env.RALPH_ALLOWED_PATHS
-        ? process.env.RALPH_ALLOWED_PATHS.split(':')
+      const allowedBasePathsEnv = getEnv('ALLOWED_PATHS');
+      const allowedBasePaths = allowedBasePathsEnv
+        ? allowedBasePathsEnv.split(':')
         : null;
 
       if (allowedBasePaths && allowedBasePaths.length > 0) {
