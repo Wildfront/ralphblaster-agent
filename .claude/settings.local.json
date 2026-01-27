@@ -73,7 +73,8 @@
       "Bash(then wc -l /Users/macmartine/src/ralph-agent/src/executor.js.backup)",
       "Bash(else echo \"Backup not found, calculating from git\")",
       "Bash(npm ls:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(git rm:*)"
     ]
   }
 }
