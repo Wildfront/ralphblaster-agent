@@ -42,7 +42,7 @@ Launches multiple agent processes with unique IDs.
 
 **Stopping agents:**
 - Press `Ctrl+C` to gracefully stop all agents
-- Or: `pkill -f 'RALPH_AGENT_ID=agent-'`
+- Or: `pkill -f 'RALPHBLASTER_AGENT_ID=agent-'`
 
 ### agent-status.sh
 
@@ -56,7 +56,7 @@ Displays the status of all running agents.
 **Example output:**
 ```
 ═══════════════════════════════════════════════════════
-  Ralph Agent Status Dashboard
+  RalphBlaster Agent Status Dashboard
 ═══════════════════════════════════════════════════════
 
 AGENT ID        STATUS     PID        LAST LOG ENTRY
@@ -112,9 +112,9 @@ Example:
 
 ## Environment Variables
 
-- `RALPH_AGENT_ID` - Set automatically by launcher script (e.g., `agent-1`)
-- `RALPH_API_TOKEN` - API token for Ralph backend (required)
-- `RALPH_API_URL` - API endpoint URL (optional, defaults to http://localhost:3000)
+- `RALPHBLASTER_AGENT_ID` - Set automatically by launcher script (e.g., `agent-1`)
+- `RALPHBLASTER_API_TOKEN` - API token for Ralph backend (required)
+- `RALPHBLASTER_API_URL` - API endpoint URL (optional, defaults to http://localhost:3000)
 
 ## Architecture
 
@@ -125,7 +125,7 @@ Example:
 - Each agent has independent event loop and resource management
 
 ### Job Distribution
-- Agents poll `/api/v1/ralph/jobs/next` independently
+- Agents poll `/api/v1/ralphblaster/jobs/next` independently
 - API atomically assigns different jobs to each agent
 - No coordination needed between agents
 - Natural load balancing through polling
@@ -158,11 +158,11 @@ Example:
 
 ### Agent Dies Immediately
 1. Check the agent's log file: `cat logs/agent-N.log`
-2. Verify `RALPH_API_TOKEN` is set correctly
-3. Verify API is accessible: `curl $RALPH_API_URL/health`
+2. Verify `RALPHBLASTER_API_TOKEN` is set correctly
+3. Verify API is accessible: `curl $RALPHBLASTER_API_URL/health`
 
 ### No Jobs Being Claimed
-1. Check if jobs are in queue: visit Ralph UI
+1. Check if jobs are in queue: visit RalphBlaster UI
 2. Verify agent has correct permissions
 3. Check API connectivity in logs
 
@@ -185,7 +185,7 @@ Example:
 
 ### Agent Won't Stop
 - Try graceful shutdown: `Ctrl+C` in launcher terminal
-- Force stop: `pkill -9 -f 'RALPH_AGENT_ID=agent-'`
+- Force stop: `pkill -9 -f 'RALPHBLASTER_AGENT_ID=agent-'`
 - Clean up PID file: `rm scripts/.agent-pids`
 
 ## Operational Tips
@@ -211,9 +211,9 @@ WantedBy=multi-user.target
 
 Enable and start:
 ```bash
-sudo systemctl enable ralph-agents
-sudo systemctl start ralph-agents
-sudo systemctl status ralph-agents
+sudo systemctl enable ralphblaster-agents
+sudo systemctl start ralphblaster-agents
+sudo systemctl status ralphblaster-agents
 ```
 
 ### Monitoring in Production

@@ -3,8 +3,8 @@
 # Ensures only one agent runs and provides visibility into its activity
 
 AGENT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-AGENT_SCRIPT="$AGENT_DIR/bin/ralph-agent.js"
-LOG_DIR="$HOME/.ralph-agent-logs"
+AGENT_SCRIPT="$AGENT_DIR/bin/ralphblaster.js"
+LOG_DIR="$HOME/.ralphblaster-logs"
 CURRENT_LOG="$LOG_DIR/agent-$(date +%Y%m%d).log"
 PID_FILE="$LOG_DIR/agent.pid"
 STATUS_FILE="$LOG_DIR/agent-status.json"
@@ -18,7 +18,7 @@ check_agent() {
         local pid=$(cat "$PID_FILE")
         if ps -p "$pid" > /dev/null 2>&1; then
             # Check if it's actually our agent process
-            if ps -p "$pid" -o command= | grep -q "ralph-agent"; then
+            if ps -p "$pid" -o command= | grep -q "ralphblaster"; then
                 return 0  # Running
             fi
         fi
@@ -31,7 +31,7 @@ check_agent() {
 # Function to kill all agent processes
 kill_all_agents() {
     echo "Searching for all Ralph agent processes..."
-    local pids=$(pgrep -f "ralph-agent.js")
+    local pids=$(pgrep -f "ralphblaster.js")
 
     if [ -z "$pids" ]; then
         echo "No agent processes found"
@@ -158,7 +158,7 @@ show_status() {
 
     echo ""
     echo "=== All Ralph Agent Processes ==="
-    local all_pids=$(pgrep -f "ralph-agent.js")
+    local all_pids=$(pgrep -f "ralphblaster.js")
 
     if [ -z "$all_pids" ]; then
         echo "No agent processes found"
