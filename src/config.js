@@ -1,6 +1,7 @@
 require('dotenv').config();
 const ConfigFileManager = require('./config-file-manager');
 const loggingConfig = require('./logging/config');
+const { getEnv, getEnvInt } = require('./utils/env-compat');
 
 // Load config from ~/.ralphblasterrc
 const configFileManager = new ConfigFileManager();
@@ -8,12 +9,12 @@ const fileConfig = configFileManager.read() || {};
 
 const config = {
   // API configuration
-  // Priority: 1. Environment variable, 2. ~/.ralphblasterrc, 3. Default
-  apiUrl: process.env.RALPH_API_URL || fileConfig.apiUrl || 'https://app.ralphblaster.com',
-  apiToken: process.env.RALPH_API_TOKEN || fileConfig.apiToken,
+  // Priority: 1. Environment variable (RALPHBLASTER_* or RALPH_*), 2. ~/.ralphblasterrc, 3. Default
+  apiUrl: getEnv('API_URL') || fileConfig.apiUrl || 'https://hq.ralphblaster.com',
+  apiToken: getEnv('API_TOKEN') || fileConfig.apiToken,
 
   // Execution configuration
-  maxRetries: parseInt(process.env.RALPH_MAX_RETRIES || '3', 10),
+  maxRetries: getEnvInt('MAX_RETRIES', 3),
 
   // Logging configuration (imported from centralized logging/config.js)
   // These are re-exported here for backward compatibility
@@ -24,9 +25,9 @@ const config = {
 
 // Validate required configuration
 if (!config.apiToken) {
-  const errorMessage = 'RALPH_API_TOKEN environment variable is required\n' +
+  const errorMessage = 'RALPHBLASTER_API_TOKEN (or RALPH_API_TOKEN) environment variable is required\n' +
     '\nRun "ralphblaster init --token=YOUR_TOKEN" to save your token,\n' +
-    'or set the RALPH_API_TOKEN environment variable.';
+    'or set the RALPHBLASTER_API_TOKEN environment variable.';
   throw new Error(errorMessage);
 }
 

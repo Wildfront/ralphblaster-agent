@@ -13,9 +13,14 @@ const LONG_POLLING_TIMEOUT_MS = (SERVER_LONG_POLL_TIMEOUT_S * 1000) + NETWORK_BU
 const REGULAR_API_TIMEOUT_MS = 15000;  // 15s for regular API calls
 const BATCH_API_TIMEOUT_MS = 30000;    // 30s for batch operations
 
+// API endpoint versions
+const NEW_API_PREFIX = '/api/v1/ralphblaster';
+const OLD_API_PREFIX = '/api/v1/ralph';
+
 class ApiClient {
   constructor(agentId = 'agent-default') {
     this.agentId = agentId;
+    this.useNewEndpoints = true; // Start with new endpoints, fall back if needed
 
     this.client = axios.create({
       baseURL: config.apiUrl,
@@ -51,13 +56,76 @@ class ApiClient {
   }
 
   /**
+   * Make an API request with automatic fallback from new to old endpoints
+   * @param {string} method - HTTP method (get, post, patch, etc.)
+   * @param {string} path - Endpoint path (e.g., '/jobs/next' or '/jobs/{id}')
+   * @param {Object} data - Request data (for POST/PATCH)
+   * @param {Object} config - Axios config options
+   * @returns {Promise<Object>} Response object
+   */
+  async requestWithFallback(method, path, data = null, config = null) {
+    const newEndpoint = `${NEW_API_PREFIX}${path}`;
+    const oldEndpoint = `${OLD_API_PREFIX}${path}`;
+
+    try {
+      // Try new endpoint first
+      const endpoint = this.useNewEndpoints ? newEndpoint : oldEndpoint;
+      logger.debug(`API request: ${method.toUpperCase()} ${endpoint}`);
+
+      // Build args array based on what's provided
+      let args;
+      if (data && config) {
+        args = [endpoint, data, config];
+      } else if (data) {
+        args = [endpoint, data];
+      } else if (config) {
+        args = [endpoint, config];
+      } else {
+        args = [endpoint];
+      }
+
+      const response = await this.client[method](...args);
+
+      // If we successfully used new endpoints, log once
+      if (this.useNewEndpoints && endpoint === newEndpoint) {
+        logger.debug('Using new /api/v1/ralphblaster/* endpoints');
+      }
+
+      return response;
+    } catch (error) {
+      // If we got a 404 and we were trying new endpoints, fall back to old
+      if (error.response?.status === 404 && this.useNewEndpoints) {
+        logger.info('New endpoint not found, falling back to legacy /api/v1/ralph/* endpoints');
+        this.useNewEndpoints = false;
+
+        // Retry with old endpoint - rebuild args array
+        let args;
+        if (data && config) {
+          args = [oldEndpoint, data, config];
+        } else if (data) {
+          args = [oldEndpoint, data];
+        } else if (config) {
+          args = [oldEndpoint, config];
+        } else {
+          args = [oldEndpoint];
+        }
+
+        return await this.client[method](...args);
+      }
+
+      // Re-throw all other errors
+      throw error;
+    }
+  }
+
+  /**
    * Poll for next available job (with long polling)
    * @returns {Promise<Object|null>} Job object or null if no jobs available
    */
   async getNextJob() {
     try {
       logger.info(`Polling for next job (long poll timeout: ${SERVER_LONG_POLL_TIMEOUT_S}s)...`);
-      const response = await this.client.get('/api/v1/ralph/jobs/next', {
+      const response = await this.requestWithFallback('get', '/jobs/next', null, {
         params: { timeout: SERVER_LONG_POLL_TIMEOUT_S }, // Server waits up to 30s for job
         timeout: LONG_POLLING_TIMEOUT_MS // Client waits up to 35s (30s + 5s buffer)
       });
@@ -123,7 +191,7 @@ class ApiClient {
    */
   async markJobRunning(jobId) {
     try {
-      await this.client.patch(`/api/v1/ralph/jobs/${jobId}`, {
+      await this.requestWithFallback('patch', `/jobs/${jobId}`, {
         status: 'running'
       });
       logger.info(`Job #${jobId} marked as running`);
@@ -220,11 +288,11 @@ class ApiClient {
       }
 
       logger.debug('Sending PATCH request to mark job as completed...', {
-        endpoint: `/api/v1/ralph/jobs/${jobId}`,
+        endpoint: `/jobs/${jobId}`,
         payloadSize: JSON.stringify(payload).length
       });
 
-      await this.client.patch(`/api/v1/ralph/jobs/${jobId}`, payload);
+      await this.requestWithFallback('patch', `/jobs/${jobId}`, payload);
       logger.info(`✓ Job #${jobId} successfully marked as completed in API`);
     } catch (error) {
       logger.error(`✗ Failed to mark job #${jobId} as completed in API`, {
@@ -281,12 +349,12 @@ class ApiClient {
       }
 
       logger.debug('Sending PATCH request to mark job as failed...', {
-        endpoint: `/api/v1/ralph/jobs/${jobId}`,
+        endpoint: `/jobs/${jobId}`,
         errorCategory: payload.error_category || 'unknown',
         hasErrorDetails: !!payload.error_details
       });
 
-      await this.client.patch(`/api/v1/ralph/jobs/${jobId}`, payload);
+      await this.requestWithFallback('patch', `/jobs/${jobId}`, payload);
       logger.info(`✓ Job #${jobId} successfully marked as failed in API with category: ${payload.error_category || 'unknown'}`);
     } catch (apiError) {
       logger.error(`✗ Failed to mark job #${jobId} as failed in API (meta-failure!)`, {
@@ -305,7 +373,7 @@ class ApiClient {
    */
   async sendHeartbeat(jobId) {
     try {
-      await this.client.patch(`/api/v1/ralph/jobs/${jobId}`, {
+      await this.requestWithFallback('patch', `/jobs/${jobId}`, {
         status: 'running',
         heartbeat: true  // Distinguish from initial markJobRunning call
       });
@@ -322,7 +390,7 @@ class ApiClient {
    */
   async sendProgress(jobId, chunk) {
     try {
-      await this.client.patch(`/api/v1/ralph/jobs/${jobId}/progress`, {
+      await this.requestWithFallback('patch', `/jobs/${jobId}/progress`, {
         chunk: chunk
       });
       logger.debug(`Progress sent for job #${jobId}`);
@@ -340,7 +408,7 @@ class ApiClient {
    */
   async sendStatusEvent(jobId, eventType, message, metadata = {}) {
     try {
-      await this.client.post(`/api/v1/ralph/jobs/${jobId}/events`, {
+      await this.requestWithFallback('post', `/jobs/${jobId}/events`, {
         event_type: eventType,
         message: message,
         metadata: metadata
@@ -377,7 +445,7 @@ class ApiClient {
     }
 
     try {
-      await this.client.patch(`/api/v1/ralph/jobs/${jobId}/metadata`, {
+      await this.requestWithFallback('patch', `/jobs/${jobId}/metadata`, {
         metadata: metadata
       });
       logger.debug(`Metadata updated for job #${jobId}`, metadata);
@@ -408,7 +476,7 @@ class ApiClient {
         payload.metadata = metadata;
       }
 
-      await this.client.patch(`/api/v1/ralph/jobs/${jobId}/setup_log`, payload);
+      await this.requestWithFallback('patch', `/jobs/${jobId}/setup_log`, payload);
       logger.debug(`Setup log sent for job #${jobId}: [${level}] ${message}`);
     } catch (error) {
       logger.debug(`Error sending setup log for job #${jobId}: ${error.message}`);
@@ -427,7 +495,7 @@ class ApiClient {
     if (!logs || logs.length === 0) return;
 
     try {
-      await this.client.post(`/api/v1/ralph/jobs/${jobId}/setup_logs`, {
+      await this.requestWithFallback('post', `/jobs/${jobId}/setup_logs`, {
         logs: logs
       }, {
         timeout: BATCH_API_TIMEOUT_MS // 30s for batch operations

@@ -65,6 +65,7 @@ function redactSensitiveData(data) {
     dataStr = dataStr
       .replace(/"Authorization":\s*"Bearer [^"]+"/g, '"Authorization": "Bearer [REDACTED]"')
       .replace(/Authorization:\s*Bearer\s+[^\s,}]+/g, 'Authorization: Bearer [REDACTED]')
+      .replace(/RALPHBLASTER_API_TOKEN=[^\s&]+/g, 'RALPHBLASTER_API_TOKEN=[REDACTED]')
       .replace(/RALPH_API_TOKEN=[^\s&]+/g, 'RALPH_API_TOKEN=[REDACTED]')
       .replace(/"apiToken":\s*"[^"]+"/g, '"apiToken": "[REDACTED]"')
       .replace(/"token":\s*"[^"]+"/g, '"token": "[REDACTED]"')
