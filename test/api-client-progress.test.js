@@ -46,7 +46,7 @@ describe('ApiClient Progress Updates', () => {
       await apiClient.sendProgress(123, 'Some output chunk');
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/123/progress',
+        '/api/v1/ralphblaster/jobs/123/progress',
         { chunk: 'Some output chunk' }
       );
     });
@@ -64,17 +64,17 @@ describe('ApiClient Progress Updates', () => {
       expect(mockAxiosInstance.patch).toHaveBeenCalledTimes(3);
       expect(mockAxiosInstance.patch).toHaveBeenNthCalledWith(
         1,
-        '/api/v1/ralph/jobs/456/progress',
+        '/api/v1/ralphblaster/jobs/456/progress',
         { chunk: 'Chunk 1\n' }
       );
       expect(mockAxiosInstance.patch).toHaveBeenNthCalledWith(
         2,
-        '/api/v1/ralph/jobs/456/progress',
+        '/api/v1/ralphblaster/jobs/456/progress',
         { chunk: 'Chunk 2\n' }
       );
       expect(mockAxiosInstance.patch).toHaveBeenNthCalledWith(
         3,
-        '/api/v1/ralph/jobs/456/progress',
+        '/api/v1/ralphblaster/jobs/456/progress',
         { chunk: 'Chunk 3\n' }
       );
     });
@@ -88,7 +88,7 @@ describe('ApiClient Progress Updates', () => {
       await apiClient.sendProgress(789, '');
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/789/progress',
+        '/api/v1/ralphblaster/jobs/789/progress',
         { chunk: '' }
       );
     });
@@ -104,7 +104,7 @@ describe('ApiClient Progress Updates', () => {
       await apiClient.sendProgress(111, largeChunk);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/111/progress',
+        '/api/v1/ralphblaster/jobs/111/progress',
         { chunk: largeChunk }
       );
     });
@@ -156,7 +156,7 @@ describe('ApiClient Progress Updates', () => {
       await apiClient.sendProgress(555, specialChunk);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/555/progress',
+        '/api/v1/ralphblaster/jobs/555/progress',
         { chunk: specialChunk }
       );
     });
@@ -172,7 +172,7 @@ describe('ApiClient Progress Updates', () => {
       await apiClient.sendProgress(666, unicodeChunk);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralph/jobs/666/progress',
+        '/api/v1/ralphblaster/jobs/666/progress',
         { chunk: unicodeChunk }
       );
     });

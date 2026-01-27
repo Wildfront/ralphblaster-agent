@@ -103,6 +103,20 @@ describe('redactSensitiveData', () => {
     expect(result).toBe('RALPH_API_TOKEN=[REDACTED]&other=value');
   });
 
+  test('redacts RALPHBLASTER_API_TOKEN environment variable', () => {
+    const input = 'RALPHBLASTER_API_TOKEN=sk-12345&other=value';
+    const result = redactSensitiveData(input);
+
+    expect(result).toBe('RALPHBLASTER_API_TOKEN=[REDACTED]&other=value');
+  });
+
+  test('redacts both RALPH_API_TOKEN and RALPHBLASTER_API_TOKEN in same string', () => {
+    const input = 'RALPH_API_TOKEN=old-token&RALPHBLASTER_API_TOKEN=new-token&other=value';
+    const result = redactSensitiveData(input);
+
+    expect(result).toBe('RALPH_API_TOKEN=[REDACTED]&RALPHBLASTER_API_TOKEN=[REDACTED]&other=value');
+  });
+
   test('redacts multiple tokens in same string', () => {
     const input = '{"token": "secret1", "apiToken": "secret2"}';
     const result = redactSensitiveData(input);

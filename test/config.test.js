@@ -27,28 +27,46 @@ describe('Config', () => {
   });
 
   describe('API Token validation', () => {
-    test('throws error when RALPH_API_TOKEN is missing', () => {
+    test('throws error when API token is missing', () => {
       delete process.env.RALPH_API_TOKEN;
+      delete process.env.RALPHBLASTER_API_TOKEN;
 
       expect(() => {
         require('../src/config');
-      }).toThrow('RALPH_API_TOKEN environment variable is required');
+      }).toThrow('RALPHBLASTER_API_TOKEN (or RALPH_API_TOKEN) environment variable is required');
     });
 
-    test('throws error when RALPH_API_TOKEN is empty string', () => {
+    test('throws error when API token is empty string', () => {
       process.env.RALPH_API_TOKEN = '';
 
       expect(() => {
         require('../src/config');
-      }).toThrow('RALPH_API_TOKEN environment variable is required');
+      }).toThrow('RALPHBLASTER_API_TOKEN (or RALPH_API_TOKEN) environment variable is required');
     });
 
-    test('accepts valid RALPH_API_TOKEN', () => {
+    test('accepts valid RALPH_API_TOKEN (backward compatibility)', () => {
       process.env.RALPH_API_TOKEN = 'valid-token-123';
 
       const config = require('../src/config');
 
       expect(config.apiToken).toBe('valid-token-123');
+    });
+
+    test('accepts valid RALPHBLASTER_API_TOKEN', () => {
+      process.env.RALPHBLASTER_API_TOKEN = 'valid-token-456';
+
+      const config = require('../src/config');
+
+      expect(config.apiToken).toBe('valid-token-456');
+    });
+
+    test('prefers RALPHBLASTER_API_TOKEN over RALPH_API_TOKEN', () => {
+      process.env.RALPH_API_TOKEN = 'old-token';
+      process.env.RALPHBLASTER_API_TOKEN = 'new-token';
+
+      const config = require('../src/config');
+
+      expect(config.apiToken).toBe('new-token');
     });
   });
 
@@ -71,7 +89,7 @@ describe('Config', () => {
 
       const config = require('../src/config');
 
-      expect(config.apiUrl).toBe('https://app.ralphblaster.com');
+      expect(config.apiUrl).toBe('https://hq.ralphblaster.com');
     });
 
     test('uses default max retries when not set', () => {
@@ -129,8 +147,8 @@ describe('Config', () => {
 
       const config = require('../src/config');
 
-      // parseInt('not-a-number', 10) returns NaN
-      expect(isNaN(config.maxRetries)).toBe(true);
+      // Invalid values now default to 3
+      expect(config.maxRetries).toBe(3);
     });
 
     test('handles negative max retries', () => {
@@ -139,7 +157,8 @@ describe('Config', () => {
 
       const config = require('../src/config');
 
-      expect(config.maxRetries).toBe(-5);
+      // Negative values now default to 3
+      expect(config.maxRetries).toBe(3);
     });
 
     test('handles zero max retries', () => {
@@ -148,7 +167,8 @@ describe('Config', () => {
 
       const config = require('../src/config');
 
-      expect(config.maxRetries).toBe(0);
+      // Zero now defaults to 3 (must be positive)
+      expect(config.maxRetries).toBe(3);
     });
   });
 });
