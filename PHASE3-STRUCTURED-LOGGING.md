@@ -44,7 +44,7 @@ logger.event('worktree.creating', {
   component: 'worktree',
   operation: 'create',
   path: '/path/to/worktree',
-  branch: 'ralph/feature-branch'
+  branch: 'ralphblaster/feature-branch'
 });
 ```
 
@@ -75,7 +75,7 @@ logger.info('Worktree created', {
   component: 'worktree',
   operation: 'create',
   path: '/path/to/worktree',
-  branch: 'ralph/feature-branch',
+  branch: 'ralphblaster/feature-branch',
   duration: 3200
 });
 ```
@@ -93,7 +93,7 @@ logger.info('Worktree created', {
 
 1. **Receive log** → PATCH /jobs/:id/setup_log with metadata field
 2. **Sanitize metadata** → Validate safe values, allow nested objects
-3. **Store in task.ralph_logs** → Each log has `metadata` field
+3. **Store in task.ralphblaster_logs** → Each log has `metadata` field
 4. **Broadcast to UI** → UI receives structured data
 
 ### UI Display
@@ -109,7 +109,7 @@ Logs are stored with structure:
     "operation": "create",
     "eventType": "worktree.creating",
     "path": "/Users/.../job-1414",
-    "branch": "ralph/feature-branch",
+    "branch": "ralphblaster/feature-branch",
     "jobType": "code_execution",
     "taskTitle": "Make background lighter"
   }
@@ -128,7 +128,7 @@ UI can now:
 
 **Before (Phase 2):**
 ```http
-PATCH /api/v1/ralph/jobs/:id/setup_log
+PATCH /api/v1/ralphblaster/jobs/:id/setup_log
 {
   "level": "info",
   "message": "Creating worktree",
@@ -138,7 +138,7 @@ PATCH /api/v1/ralph/jobs/:id/setup_log
 
 **After (Phase 3):**
 ```http
-PATCH /api/v1/ralph/jobs/:id/setup_log
+PATCH /api/v1/ralphblaster/jobs/:id/setup_log
 {
   "level": "info",
   "message": "Creating",
@@ -148,7 +148,7 @@ PATCH /api/v1/ralph/jobs/:id/setup_log
     "operation": "create",
     "eventType": "worktree.creating",
     "path": "/Users/.../job-1414",
-    "branch": "ralph/feature-branch"
+    "branch": "ralphblaster/feature-branch"
   }
 }
 ```
@@ -156,7 +156,7 @@ PATCH /api/v1/ralph/jobs/:id/setup_log
 ### Batch Endpoint (Updated)
 
 ```http
-POST /api/v1/ralph/jobs/:id/setup_logs
+POST /api/v1/ralphblaster/jobs/:id/setup_logs
 {
   "logs": [
     {
@@ -245,15 +245,15 @@ Phase 3 formats messages intelligently:
 logger.info('Creating worktree', {
   component: 'worktree',
   path: '/Users/.../job-1414',
-  branch: 'ralph/feature-branch',
+  branch: 'ralphblaster/feature-branch',
   duration: 3200
 });
 
 // Terminal Output:
-// [2025-01-23T10:30:45Z] [INFO] [job-1414] [worktree] Creating worktree [worktree] (3.2s) path: /Users/.../job-1414 branch: ralph/feature-branch
+// [2025-01-23T10:30:45Z] [INFO] [job-1414] [worktree] Creating worktree [worktree] (3.2s) path: /Users/.../job-1414 branch: ralphblaster/feature-branch
 
 // Message sent to UI:
-// "Creating worktree [worktree] (3.2s) path: /Users/.../job-1414 branch: ralph/feature-branch"
+// "Creating worktree [worktree] (3.2s) path: /Users/.../job-1414 branch: ralphblaster/feature-branch"
 
 // Metadata stored in DB:
 // { component: 'worktree', path: '...', branch: '...', duration: 3200 }

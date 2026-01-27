@@ -2,7 +2,7 @@
 
 ## Overview
 
-Ralph agent now supports running multiple concurrent agents to process jobs in parallel. You can launch multiple agents using your existing `npm start` or `ralphblaster` commands.
+RalphBlaster agent now supports running multiple concurrent agents to process jobs in parallel. You can launch multiple agents using your existing `npm start` or `ralphblaster` commands.
 
 ## Quick Start
 

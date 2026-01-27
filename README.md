@@ -1,10 +1,10 @@
-# Ralph Agent
+# RalphBlaster Agent
 
-Ralph Agent is a distributed autonomous coding agent that polls a Rails API for jobs and executes them locally using Claude CLI.
+RalphBlaster Agent is a distributed autonomous coding agent that polls a Rails API for jobs and executes them locally using Claude CLI.
 
 ## Features
 
-- 🔄 **Automatic Job Polling**: Continuously polls the Ralph API for new coding jobs
+- 🔄 **Automatic Job Polling**: Continuously polls the RalphBlaster API for new coding jobs
 - 🤖 **Claude CLI Integration**: Executes jobs using the Claude CLI
 - 🚀 **Multi-Agent Support**: Run multiple agents concurrently for parallel job processing
 - 💪 **Resilient**: Handles failures gracefully with automatic retries and timeouts
@@ -16,28 +16,28 @@ Ralph Agent is a distributed autonomous coding agent that polls a Rails API for 
 
 - Node.js >= 18.0.0
 - Claude CLI installed and available in PATH (`claude --version` should work)
-- A Ralph API token with `ralph_agent` permission
+- A RalphBlaster API token with `ralphblaster_agent` permission
 
 ## Installation
 
 ### Global Installation
 
 ```bash
-npm install -g ralph-agent
+npm install -g ralphblaster
 ```
 
 ### Local Installation
 
 ```bash
 git clone <repository>
-cd ralph-agent
+cd ralphblaster-agent
 npm install
 ```
 
 ### Using npx (No Installation Required)
 
 ```bash
-npx ralph-agent --token=your_token_here
+npx ralphblaster --token=your_token_here
 ```
 
 ## Usage
@@ -46,13 +46,13 @@ npx ralph-agent --token=your_token_here
 
 ```bash
 # Single agent (default)
-ralph-agent --token=your_api_token_here
+ralphblaster --token=your_api_token_here
 
 # Using environment variable
-RALPH_API_TOKEN=your_api_token_here ralph-agent
+RALPHBLASTER_API_TOKEN=your_api_token_here ralphblaster
 
 # Local development (override API URL)
-ralph-agent --token=your_token --api-url=http://localhost:5002
+ralphblaster --token=your_token --api-url=http://localhost:5002
 ```
 
 ### Multi-Agent Mode (Parallel Processing)
@@ -61,7 +61,7 @@ Run multiple agents concurrently to process jobs in parallel:
 
 ```bash
 # Run 3 agents for 3x throughput
-ralph-agent --agents=3
+ralphblaster --agents=3
 
 # With npm
 npm start -- --agents=3
@@ -89,53 +89,53 @@ The agent can be configured via environment variables or command-line flags:
 
 | Environment Variable | CLI Flag | Default | Description |
 |---------------------|----------|---------|-------------|
-| `RALPH_API_TOKEN` | `--token=` | *Required* | API authentication token |
-| `RALPH_API_URL` | `--api-url=` | `https://ralphblaster.com` | Ralph API base URL |
-| `RALPH_AGENT_ID` | `--agents=` | `agent-default` / `1` | Agent ID or agent count for multi-agent mode |
-| `RALPH_POLL_INTERVAL` | - | `5000` | Polling interval in milliseconds |
-| `RALPH_LOG_LEVEL` | - | `info` | Log level (error, warn, info, debug) |
-| `RALPH_MAX_RETRIES` | - | `3` | Maximum retry attempts |
+| `RALPHBLASTER_API_TOKEN` | `--token=` | *Required* | API authentication token |
+| `RALPHBLASTER_API_URL` | `--api-url=` | `https://ralphblaster.com` | RalphBlaster API base URL |
+| `RALPHBLASTER_AGENT_ID` | `--agents=` | `agent-default` / `1` | Agent ID or agent count for multi-agent mode |
+| `RALPHBLASTER_POLL_INTERVAL` | - | `5000` | Polling interval in milliseconds |
+| `RALPHBLASTER_LOG_LEVEL` | - | `info` | Log level (error, warn, info, debug) |
+| `RALPHBLASTER_MAX_RETRIES` | - | `3` | Maximum retry attempts |
 
 ### Using .env File
 
-Create a `.env` file in the ralph-agent directory:
+Create a `.env` file in the ralphblaster-agent directory:
 
 ```env
-RALPH_API_TOKEN=your_api_token_here
-# RALPH_API_URL=http://localhost:5002  # Uncomment for local development
-RALPH_POLL_INTERVAL=5000
-RALPH_LOG_LEVEL=info
+RALPHBLASTER_API_TOKEN=your_api_token_here
+# RALPHBLASTER_API_URL=http://localhost:5002  # Uncomment for local development
+RALPHBLASTER_POLL_INTERVAL=5000
+RALPHBLASTER_LOG_LEVEL=info
 ```
 
 Then run:
 
 ```bash
-ralph-agent
+ralphblaster
 ```
 
 ## How It Works
 
-1. **Polling**: The agent continuously polls the API endpoint `/api/v1/ralph/jobs/next` for available jobs
+1. **Polling**: The agent continuously polls the API endpoint `/api/v1/ralphblaster/jobs/next` for available jobs
 2. **Job Claiming**: When a job is found, it's automatically claimed by the agent
 3. **Status Update**: The agent marks the job as "running" and starts sending heartbeats
 4. **Execution**: The job is executed based on its type:
    - **PRD Generation**: Uses Claude `/prd` skill or direct prompts
-   - **Code Execution**: Creates a Ralph autonomous agent instance (see below)
+   - **Code Execution**: Creates a RalphBlaster agent instance (see below)
 5. **Completion**: Results are parsed and reported back to the API
 6. **Cleanup**: The agent marks the job as completed or failed and continues polling
 
-## Ralph Autonomous Agent Integration
+## RalphBlaster Agent Integration
 
-For `code_execution` job types, the agent uses the Ralph autonomous system - an iterative, PRD-driven execution framework that enables complex, multi-step implementations.
+For `code_execution` job types, the agent uses the RalphBlaster system - an iterative, PRD-driven execution framework that enables complex, multi-step implementations.
 
 ### How the Agent Works
 
-1. **Poll for Jobs**: Agent continuously polls `/api/v1/ralph/jobs/next` for available work
+1. **Poll for Jobs**: Agent continuously polls `/api/v1/ralphblaster/jobs/next` for available work
 2. **Worktree Creation**: Creates an isolated git worktree for each job in `{repo}-worktrees/job-{id}/`
 3. **Claude Execution**: Runs Claude CLI directly in the worktree with the server-provided prompt
-4. **Progress Streaming**: Real-time output streamed to `.ralph-logs/job-{id}.log` and sent to API
+4. **Progress Streaming**: Real-time output streamed to `.ralphblaster-logs/job-{id}.log` and sent to API
 5. **Git Activity**: Commits are made in the worktree, then pushed to remote
-6. **Completion**: Job status and results reported back to API via `/api/v1/ralph/jobs/{id}`
+6. **Completion**: Job status and results reported back to API via `/api/v1/ralphblaster/jobs/{id}`
 7. **Cleanup**: Worktrees are automatically removed after job completion (configurable)
 
 ### Directory Structure
@@ -147,7 +147,7 @@ my-project/                      # Your main repository
 my-project-worktrees/            # Worktrees (sibling directory)
 └── job-{id}/                    # Isolated worktree for each job
     └── [project files...]       # Isolated copy of project code
-.ralph-logs/                     # Log files (persisted)
+.ralphblaster-logs/              # Log files (persisted)
 └── job-{id}.log                 # Agent execution log
 └── job-{id}-stderr.log          # Error output (if any)
 ```
@@ -156,17 +156,17 @@ my-project-worktrees/            # Worktrees (sibling directory)
 
 Agent directly executes Claude CLI with:
 
-- `RALPH_WORKTREE_PATH` - Path to the git worktree
-- `RALPH_INSTANCE_DIR` - Path to the Ralph instance directory
-- `RALPH_MAIN_REPO` - Path to the main repository
+- `RALPHBLASTER_WORKTREE_PATH` - Path to the git worktree
+- `RALPHBLASTER_INSTANCE_DIR` - Path to the RalphBlaster instance directory
+- `RALPHBLASTER_MAIN_REPO` - Path to the main repository
 
-### Ralph Execution Limits
+### RalphBlaster Execution Limits
 
 - **Max Iterations**: 10
 - **Timeout**: 2 hours
 - **Completion**: All user stories must pass quality checks
 
-### Advantages of Ralph Integration
+### Advantages of RalphBlaster Agent Integration
 
 - **Structured Approach**: PRD-driven development ensures clear requirements
 - **Quality Assurance**: Each story is validated with tests before proceeding
@@ -176,12 +176,12 @@ Agent directly executes Claude CLI with:
 
 ## API Token Setup
 
-To create an API token with ralph_agent permission:
+To create an API token with ralphblaster_agent permission:
 
-1. Log into your Ralph account
+1. Log into your RalphBlaster account
 2. Navigate to API Tokens settings
 3. Create a new token
-4. Check the "Ralph Agent Access" permission
+4. Check the "RalphBlaster Agent Access" permission
 5. Copy the token (shown only once!)
 
 ## Example Output
@@ -189,10 +189,10 @@ To create an API token with ralph_agent permission:
 ```
 [2026-01-16T20:00:00.000Z] [INFO]
 ╔═══════════════════════════════════════╗
-║      Ralph Agent Starting...          ║
+║   RalphBlaster Agent Starting...      ║
 ╚═══════════════════════════════════════╝
 
-[2026-01-16T20:00:00.123Z] [INFO] Ralph Agent starting...
+[2026-01-16T20:00:00.123Z] [INFO] RalphBlaster Agent starting...
 [2026-01-16T20:00:00.124Z] [INFO] API URL: https://ralphblaster.com
 [2026-01-16T20:00:00.125Z] [INFO] Poll interval: 5000ms
 [2026-01-16T20:00:05.234Z] [INFO] Claimed job #42 - Implement user authentication
@@ -212,9 +212,9 @@ The agent handles shutdown signals gracefully:
 
 ## Troubleshooting
 
-### "API token requires 'ralph_agent' permission"
+### "API token requires 'ralphblaster_agent' permission"
 
-Your API token doesn't have the correct permissions. Create a new token with the `ralph_agent` permission checked.
+Your API token doesn't have the correct permissions. Create a new token with the `ralphblaster_agent` permission checked.
 
 ### "Cannot connect to API"
 
@@ -232,7 +232,7 @@ Ensure:
 
 ### "Project path does not exist"
 
-The project's `system_path` in Ralph is incorrect or the directory doesn't exist on your machine.
+The project's `system_path` in RalphBlaster is incorrect or the directory doesn't exist on your machine.
 
 ## Development
 
@@ -247,27 +247,27 @@ npm start
 Enable debug logging:
 
 ```bash
-RALPH_LOG_LEVEL=debug ralph-agent --token=your_token
+RALPHBLASTER_LOG_LEVEL=debug ralphblaster --token=your_token
 ```
 
 ## Architecture
 
 ```
-┌─────────────────┐         ┌──────────────────┐
-│  Ralph Agent    │         │   Rails API      │
-│                 │         │                  │
-│  ┌──────────┐   │  Poll   │  ┌────────────┐  │
-│  │  Polling │───┼────────>│  │ Job Queue  │  │
-│  │   Loop   │   │         │  └────────────┘  │
-│  └──────────┘   │         │                  │
-│       │         │  Claim  │                  │
-│       ▼         │<────────┤                  │
-│  ┌──────────┐   │         │                  │
-│  │ Executor │   │         │                  │
-│  │  (Claude)│   │ Status  │                  │
-│  └──────────┘   │────────>│                  │
-│                 │         │                  │
-└─────────────────┘         └──────────────────┘
+┌──────────────────────┐         ┌──────────────────┐
+│  RalphBlaster Agent  │         │   Rails API      │
+│                      │         │                  │
+│  ┌──────────┐        │  Poll   │  ┌────────────┐  │
+│  │  Polling │────────┼────────>│  │ Job Queue  │  │
+│  │   Loop   │        │         │  └────────────┘  │
+│  └──────────┘        │         │                  │
+│       │              │  Claim  │                  │
+│       ▼              │<────────┤                  │
+│  ┌──────────┐        │         │                  │
+│  │ Executor │        │         │                  │
+│  │  (Claude)│        │ Status  │                  │
+│  └──────────┘        │────────>│                  │
+│                      │         │                  │
+└──────────────────────┘         └──────────────────┘
 ```
 
 ## License
