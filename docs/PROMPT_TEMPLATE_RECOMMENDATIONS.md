@@ -2,7 +2,7 @@
 
 ## Current Architecture
 
-The Ralph Blaster Agent receives **pre-formatted prompts** from the Rails application via `job.prompt`. The agent doesn't build prompts - it validates and executes them:
+The RalphBlaster Agent receives **pre-formatted prompts** from the Rails application via `job.prompt`. The agent doesn't build prompts - it validates and executes them:
 
 ```javascript
 // Agent side (src/executor/job-handlers/*.js)

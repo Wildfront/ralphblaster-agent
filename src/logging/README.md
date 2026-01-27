@@ -1,6 +1,6 @@
 # Logging Configuration
 
-This directory contains centralized logging configuration for the Ralph Agent.
+This directory contains centralized logging configuration for the RalphBlaster Agent.
 
 ## Files
 
@@ -38,13 +38,13 @@ console.log(loggingConfig.maxBatchSize);    // 10
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `RALPH_LOG_LEVEL` | string | `info` | Log level: error, warn, info, debug |
-| `RALPH_CONSOLE_COLORS` | boolean | `true` | Enable/disable colored output |
-| `RALPH_CONSOLE_FORMAT` | string | `pretty` | Console format: pretty, json |
-| `RALPH_AGENT_ID` | string | `agent-default` | Agent identifier for multi-agent mode |
-| `RALPH_MAX_BATCH_SIZE` | number | `10` | Max logs to batch before flush |
-| `RALPH_FLUSH_INTERVAL` | number | `2000` | Milliseconds between auto-flushes |
-| `RALPH_USE_BATCH_ENDPOINT` | boolean | `true` | Use batch API endpoint |
+| `RALPHBLASTER_LOG_LEVEL` | string | `info` | Log level: error, warn, info, debug |
+| `RALPHBLASTER_CONSOLE_COLORS` | boolean | `true` | Enable/disable colored output |
+| `RALPHBLASTER_CONSOLE_FORMAT` | string | `pretty` | Console format: pretty, json |
+| `RALPHBLASTER_AGENT_ID` | string | `agent-default` | Agent identifier for multi-agent mode |
+| `RALPHBLASTER_MAX_BATCH_SIZE` | number | `10` | Max logs to batch before flush |
+| `RALPHBLASTER_FLUSH_INTERVAL` | number | `2000` | Milliseconds between auto-flushes |
+| `RALPHBLASTER_USE_BATCH_ENDPOINT` | boolean | `true` | Use batch API endpoint |
 
 ### Validation
 

@@ -154,13 +154,13 @@ Configure logging behavior through environment variables:
 
 ```bash
 # Log level (default: info)
-export RALPH_LOG_LEVEL=debug      # error | warn | info | debug
+export RALPHBLASTER_LOG_LEVEL=debug      # error | warn | info | debug
 
 # Console formatting (default: pretty)
-export RALPH_CONSOLE_FORMAT=json  # pretty | json
+export RALPHBLASTER_CONSOLE_FORMAT=json  # pretty | json
 
 # Console colors (default: true)
-export RALPH_CONSOLE_COLORS=false # true | false
+export RALPHBLASTER_CONSOLE_COLORS=false # true | false
 ```
 
 ### Configuration File
@@ -403,12 +403,12 @@ The logger writes to multiple destinations simultaneously:
 - Optional color coding
 
 **Configuration**:
-- `RALPH_CONSOLE_FORMAT=pretty` (clean) or `json` (detailed)
-- `RALPH_CONSOLE_COLORS=true` (default) or `false`
+- `RALPHBLASTER_CONSOLE_FORMAT=pretty` (clean) or `json` (detailed)
+- `RALPHBLASTER_CONSOLE_COLORS=true` (default) or `false`
 
 ### 2. Job Log Files
 
-**Managed by LogFileHelper**. Creates per-job log files in `.ralph-logs/`:
+**Managed by LogFileHelper**. Creates per-job log files in `.ralphblaster-logs/`:
 
 ```javascript
 const LogFileHelper = require('./utils/log-file-helper');
@@ -437,7 +437,7 @@ LogFileHelper.writeCompletionFooterToStream(logStream, 'PRD Generation', {
 - Standard header with job ID, title, timestamp
 - Real-time streaming for long-running jobs
 - Completion footer with metadata
-- Located in `.ralph-logs/job-{id}.log`
+- Located in `.ralphblaster-logs/job-{id}.log`
 
 ### 3. API Logging
 
@@ -636,16 +636,16 @@ logger.info('Database connection', { host, database }); // No password
 1. **Log level too low**:
    ```bash
    # Check current level
-   echo $RALPH_LOG_LEVEL
+   echo $RALPHBLASTER_LOG_LEVEL
 
    # Set to debug for maximum verbosity
-   export RALPH_LOG_LEVEL=debug
+   export RALPHBLASTER_LOG_LEVEL=debug
    ```
 
 2. **Console colors disabled**:
    ```bash
    # Re-enable colors
-   export RALPH_CONSOLE_COLORS=true
+   export RALPHBLASTER_CONSOLE_COLORS=true
    ```
 
 3. **Output redirected**:
@@ -679,7 +679,7 @@ logger.info('Database connection', { host, database }); // No password
 3. **API client not configured**:
    ```bash
    # Check token is set
-   echo $RALPH_API_TOKEN
+   echo $RALPHBLASTER_API_TOKEN
 
    # Or in ~/.ralphblasterrc
    cat ~/.ralphblasterrc
@@ -688,7 +688,7 @@ logger.info('Database connection', { host, database }); // No password
 4. **Network issues**:
    ```javascript
    // Enable debug logging to see API errors
-   export RALPH_LOG_LEVEL=debug
+   export RALPHBLASTER_LOG_LEVEL=debug
 
    // Check for network error messages
    ```
@@ -697,12 +697,12 @@ logger.info('Database connection', { host, database }); // No password
 
 **Symptom**: Console shows clean logs but API doesn't receive metadata
 
-**Cause**: Using `RALPH_CONSOLE_FORMAT=pretty` (expected behavior)
+**Cause**: Using `RALPHBLASTER_CONSOLE_FORMAT=pretty` (expected behavior)
 
 **Solution**: Pretty format hides metadata in console but still sends it to API. To see metadata in console:
 
 ```bash
-export RALPH_CONSOLE_FORMAT=json
+export RALPHBLASTER_CONSOLE_FORMAT=json
 ```
 
 ### Performance Issues
@@ -747,15 +747,16 @@ export RALPH_CONSOLE_FORMAT=json
 **Solution**: The logger redacts common patterns automatically:
 
 - `Authorization: Bearer [REDACTED]`
-- `RALPH_API_TOKEN=[REDACTED]`
+- `RALPHBLASTER_API_TOKEN=[REDACTED]`
+- `RALPHBLASTER_API_TOKEN=[REDACTED]`
 - `"apiToken": "[REDACTED]"`
 - `"token": "[REDACTED]"`
 
-If custom secrets leak, add patterns to `redactSensitiveData()` in `src/logger.js`.
+If custom secrets leak, add patterns to `redactSensitiveData()` in `src/logging/formatter.js`.
 
 ### Log Files Growing Too Large
 
-**Symptom**: `.ralph-logs/` directory consuming disk space
+**Symptom**: `.ralphblaster-logs/` directory consuming disk space
 
 **Solution**: Implement log rotation:
 
