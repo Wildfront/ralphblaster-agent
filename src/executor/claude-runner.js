@@ -171,6 +171,11 @@ class ClaudeRunner {
 
         // Log stderr but don't treat as JSON
         process.stderr.write(stderrChunk);
+
+        // Send stderr to progress callback (Claude's interactive output comes on stderr)
+        if (onProgress) {
+          onProgress(stderrChunk);
+        }
       });
 
       claude.on('close', (code) => {
@@ -336,7 +341,7 @@ class ClaudeRunner {
       });
 
       // Capture stderr
-      claudeProcess.stderr.on('data', (data) => {
+      claudeProcess.stderr.on('data', async (data) => {
         const chunk = data.toString();
         errorOutput += chunk;
         // Save to instance variable for log file
@@ -344,6 +349,23 @@ class ClaudeRunner {
 
         // Log stderr but don't treat as JSON
         process.stderr.write(chunk);
+
+        // Stream stderr to API in real-time (Claude's interactive output comes on stderr)
+        if (this.apiClient) {
+          try {
+            await this.apiClient.sendProgress(job.id, chunk, {
+              component: 'claude',
+              operation: 'execution'
+            });
+          } catch (err) {
+            logger.warn(`Failed to send stderr progress to API: ${err.message}`);
+          }
+        }
+
+        // Call onProgress callback for stderr (for backwards compatibility)
+        if (onProgress) {
+          onProgress(chunk);
+        }
       });
 
       // Wait for completion
