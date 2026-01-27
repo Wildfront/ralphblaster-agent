@@ -2,7 +2,7 @@
 
 ## Overview
 
-Successfully implemented multi-agent support to enable multiple Ralph agent processes to run concurrently, processing different jobs in parallel.
+Successfully implemented multi-agent support to enable multiple RalphBlaster agent processes to run concurrently, processing different jobs in parallel.
 
 ## Implementation Approach
 
@@ -15,14 +15,14 @@ Successfully implemented multi-agent support to enable multiple Ralph agent proc
 ## Changes Made
 
 ### 1. Agent ID Support (src/index.js)
-- Added `RALPH_AGENT_ID` environment variable support
+- Added `RALPHBLASTER_AGENT_ID` environment variable support
 - Agent ID defaults to 'agent-default' if not specified
 - Pass agent ID to ApiClient and Logger for traceability
 - Log agent ID on startup
 
 **Code changes:**
 ```javascript
-this.agentId = process.env.RALPH_AGENT_ID || 'agent-default';
+this.agentId = process.env.RALPHBLASTER_AGENT_ID || 'agent-default';
 this.apiClient = new ApiClient(this.agentId);
 logger.setAgentId(this.agentId);
 ```
@@ -136,7 +136,7 @@ watch -n 5 ./scripts/agent-status.sh        # Continuous monitoring
 │                            │                               │
 │                            ▼                               │
 │                   ┌────────────────┐                      │
-│                   │   Ralph API    │                      │
+│                   │ RalphBlaster   │                      │
 │                   │  Job Queue     │                      │
 │                   └────────────────┘                      │
 │                                                           │
@@ -147,7 +147,7 @@ watch -n 5 ./scripts/agent-status.sh        # Continuous monitoring
 1. Agent polls `/api/v1/ralph/jobs/next` with agent ID header
 2. API atomically assigns next available job
 3. Agent claims job, creates isolated git worktree
-4. Agent executes job (Ralph → Claude Code)
+4. Agent executes job (RalphBlaster → Claude Code)
 5. Agent reports progress/completion to API
 6. Agent cleans up worktree
 7. Agent polls for next job (loop)
@@ -170,7 +170,7 @@ To fully validate the implementation:
 
 1. **Single agent test:**
    ```bash
-   RALPH_AGENT_ID="agent-test" node src/index.js
+   RALPHBLASTER_AGENT_ID="agent-test" node src/index.js
    # Verify agent ID appears in logs
    ```
 
@@ -190,7 +190,7 @@ To fully validate the implementation:
    ```
 
 4. **Concurrent job test:**
-   - Queue 3+ jobs in Ralph UI
+   - Queue 3+ jobs in RalphBlaster UI
    - Start 2 agents
    - Verify different agents claim different jobs
    - Check logs show parallel execution
@@ -288,7 +288,7 @@ Ready for production:
 ## Rollback Plan
 
 If issues arise:
-1. Stop all agents: `Ctrl+C` or `pkill -f RALPH_AGENT_ID`
+1. Stop all agents: `Ctrl+C` or `pkill -f RALPHBLASTER_AGENT_ID`
 2. Clean up: `rm scripts/.agent-pids`
 3. Revert to single agent: `node src/index.js`
 4. Changes are backward compatible - single agent still works
@@ -304,6 +304,6 @@ For issues or questions:
 ## Credits
 
 Implementation based on proven patterns from:
-- `old-scripts/ralph-multi.sh` - Multi-instance launcher pattern
-- `old-scripts/ralph-status.sh` - Status monitoring pattern
+- `old-scripts/ralphblaster-multi.sh` - Multi-instance launcher pattern
+- `old-scripts/ralphblaster-status.sh` - Status monitoring pattern
 - Standard multi-process architecture (nginx, gunicorn, etc.)

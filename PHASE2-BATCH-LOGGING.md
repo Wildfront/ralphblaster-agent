@@ -107,13 +107,13 @@ await logger.clearJobContext();
 
 #### New Batch Endpoint
 
-**Route:** `POST /api/v1/ralph/jobs/:id/setup_logs`
+**Route:** `POST /api/v1/ralphblaster/jobs/:id/setup_logs`
 
 **Controller:** `Api::V1::RalphJobsController#add_setup_logs_batch`
 
 **Request Format:**
 ```json
-POST /api/v1/ralph/jobs/1234/setup_logs
+POST /api/v1/ralphblaster/jobs/1234/setup_logs
 {
   "logs": [
     {
@@ -149,7 +149,7 @@ POST /api/v1/ralph/jobs/1234/setup_logs
 **Database Efficiency:**
 - Single transaction for all logs
 - Single `task.save` call (batch insert)
-- Single `broadcast_ralph_update` to UI
+- Single `broadcast_ralphblaster_update` to UI
 
 ## Backward Compatibility
 
@@ -188,7 +188,7 @@ agent: batcher.flush()
 - Phase 1 single-log endpoint still works
 - Agent works with old backend (pre-Phase 2)
 - Backend works with old agent (pre-Phase 2)
-- UI code unchanged (still displays `task.ralph_logs`)
+- UI code unchanged (still displays `task.ralphblaster_logs`)
 
 ## Configuration Options
 
@@ -248,7 +248,7 @@ Both orders are safe due to graceful fallback!
 
 **Check backend logs:**
 ```
-POST /api/v1/ralph/jobs/1234/setup_logs {"logs":[...]} 200 OK
+POST /api/v1/ralphblaster/jobs/1234/setup_logs {"logs":[...]} 200 OK
 Batch setup logs: Added 10 logs for job 1234
 ```
 
@@ -354,7 +354,7 @@ await logger.clearJobContext();
 - Check for debug/warn logs being batched (shouldn't happen)
 
 **422 Unprocessable Entity - "Failed to save logs"**
-- Database issue saving `task.ralph_logs`
+- Database issue saving `task.ralphblaster_logs`
 - Check task exists and is accessible
 - Check database constraints
 

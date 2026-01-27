@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document summarizes the comprehensive refactoring of the Ralph Agent executor system, completed on January 23, 2026. The refactoring transformed a monolithic 1,522-line executor into a modular, well-tested system of focused components.
+This document summarizes the comprehensive refactoring of the RalphBlaster Agent executor system, completed on January 23, 2026. The refactoring transformed a monolithic 1,522-line executor into a modular, well-tested system of focused components.
 
 ## Objectives Achieved
 

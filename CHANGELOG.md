@@ -4,7 +4,7 @@
 
 ### Critical Bug Fix
 
-**Issue**: Worktrees were being created inside the main repository (`.ralph-worktrees/`), causing git to switch the main directory to the worktree's branch.
+**Issue**: Worktrees were being created inside the main repository (`.ralphblaster-worktrees/`), causing git to switch the main directory to the worktree's branch.
 
 **Impact**:
 - Users working in the main directory would find their branch unexpectedly switched
@@ -25,10 +25,10 @@
 ### Migration Notes
 
 **For existing installations:**
-- Old worktrees in `.ralph-worktrees/` will remain but won't be used
+- Old worktrees in `.ralphblaster-worktrees/` will remain but won't be used (already using correct naming)
 - New jobs will create worktrees in the new location
-- You can safely delete old `.ralph-worktrees/` directories after verifying no active work exists
-- Add `.ralph-worktrees/` to your `.gitignore` to hide legacy directories
+- You can safely delete old `.ralphblaster-worktrees/` directories after verifying no active work exists
+- Add `.ralphblaster-worktrees/` to your `.gitignore` to hide legacy directories
 
 ### Testing
 
@@ -36,7 +36,7 @@ Verified:
 - All 33 WorktreeManager tests pass
 - Worktrees created in correct sibling location
 - No interference with main repository branch
-- Ralph execution works with new worktree location
+- RalphBlaster execution works with new worktree location
 
 ---
 
@@ -46,21 +46,21 @@ Verified:
 
 **Critical Fix**: PRD-to-JSON conversion now includes `--dangerously-skip-permissions` flag
 
-- Fixed: `/ralph` skill execution was failing with "permission restrictions" error
+- Fixed: `/ralphblaster` skill execution was failing with "permission restrictions" error
 - Root cause: Claude Code CLI requires explicit permission flag to write files (prd.json)
 - Impact: All code execution jobs were failing at PRD conversion step
-- Solution: Added `--dangerously-skip-permissions` to `claude /ralph` command in `convertPrdToJson()`
+- Solution: Added `--dangerously-skip-permissions` to `claude /ralphblaster` command in `convertPrdToJson()`
 
 ### Files Modified
 
-- `src/ralph-instance-manager.js` - Line 64: Added permissions flag to Claude CLI command
+- `src/ralphblaster-instance-manager.js` - Line 64: Added permissions flag to Claude CLI command
 
 ### Testing
 
 Users should verify:
 1. Code execution jobs can now convert PRD markdown to prd.json successfully
 2. No more "ENOENT: no such file or directory, access prd.json" errors
-3. Ralph instances start executing code after PRD conversion
+3. RalphBlaster instances start executing code after PRD conversion
 
 ---
 
@@ -229,13 +229,13 @@ When `job.prd_mode === "prd"` (or undefined):
 
 Make sure your `.env` file has:
 ```
-RALPH_API_URL=http://localhost:3000
-RALPH_API_TOKEN=<your_token_here>
+RALPHBLASTER_API_URL=http://localhost:3000
+RALPHBLASTER_API_TOKEN=<your_token_here>
 ```
 
 Get your API token from: http://localhost:3000/api_tokens
 
-Make sure the token has `ralph_agent` permission enabled.
+Make sure the token has `ralphblaster_agent` permission enabled.
 
 ### Troubleshooting
 
@@ -251,4 +251,4 @@ Make sure the token has `ralph_agent` permission enabled.
 - Test: `claude --version`
 
 **Job stuck in "running"**
-- Reset job: `bin/rails runner "RalphJob.find(ID).update!(status: :pending)"`
+- Reset job: `bin/rails runner "RalphblasterJob.find(ID).update!(status: :pending)"`

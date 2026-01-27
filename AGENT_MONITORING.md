@@ -1,10 +1,10 @@
-# Ralph Agent Monitoring Guide
+# RalphBlaster Agent Monitoring Guide
 
-This guide explains how to monitor your Ralph agent and troubleshoot issues like invisible job processing.
+This guide explains how to monitor your RalphBlaster agent and troubleshoot issues like invisible job processing.
 
 ## The Problem
 
-Ralph agents can sometimes:
+RalphBlaster agents can sometimes:
 - Run in background processes you can't see
 - Get stuck and stop polling
 - Have multiple instances running simultaneously
@@ -64,7 +64,7 @@ Press Ctrl+C to exit.
 
 ## Log Files
 
-All logs are stored in `~/.ralph-agent-logs/`:
+All logs are stored in `~/.ralphblaster-agent-logs/`:
 - `agent-YYYYMMDD.log` - Daily log files
 - `agent.pid` - PID file for the running agent
 
@@ -150,11 +150,11 @@ If you don't see activity, the visible agent isn't processing jobs.
 
 ### 1. Always Use the Monitor
 
-Instead of running `node bin/ralph-agent.js` directly:
+Instead of running `node bin/ralphblaster.js` directly:
 
 ```bash
 # ❌ Don't do this
-node bin/ralph-agent.js &
+node bin/ralphblaster-agent.js &
 
 # ✅ Do this instead
 bin/monitor-agent.sh start
@@ -176,7 +176,7 @@ Keep the dashboard open in a separate terminal:
 
 ```bash
 # Terminal 1: Your development work
-cd /Users/macmartine/src/ralph-agent
+cd /Users/macmartine/src/ralphblaster-agent
 # ... make changes ...
 
 # Terminal 2: Live monitoring
@@ -189,7 +189,7 @@ Add to your workflow:
 
 ```bash
 # Morning routine
-cd ~/src/ralph-agent
+cd ~/src/ralphblaster-agent
 bin/monitor-agent.sh status
 bin/monitor-agent.sh show-logs 20
 ```
@@ -200,8 +200,8 @@ If you run the agent in tmux/screen, use the monitor:
 
 ```bash
 # In your tmux session
-tmux new -s ralph-agent
-cd ~/src/ralph-agent
+tmux new -s ralphblaster-agent
+cd ~/src/ralphblaster-agent
 bin/monitor-agent.sh start
 
 # Detach: Ctrl+B, D
@@ -210,7 +210,7 @@ bin/monitor-agent.sh start
 bin/monitor-agent.sh status
 
 # Reattach to see live logs
-tmux attach -t ralph-agent
+tmux attach -t ralphblaster-agent
 bin/monitor-agent.sh logs
 ```
 
@@ -254,17 +254,17 @@ bin/monitor-agent.sh stop
 For production servers, you can create a systemd service:
 
 ```bash
-# /etc/systemd/system/ralph-agent.service
+# /etc/systemd/system/ralphblaster-agent.service
 [Unit]
-Description=Ralph Agent
+Description=RalphBlaster Agent
 After=network.target
 
 [Service]
 Type=simple
 User=youruser
-WorkingDirectory=/home/youruser/ralph-agent
-ExecStart=/home/youruser/ralph-agent/bin/monitor-agent.sh start
-ExecStop=/home/youruser/ralph-agent/bin/monitor-agent.sh stop
+WorkingDirectory=/home/youruser/ralphblaster-agent
+ExecStart=/home/youruser/ralphblaster-agent/bin/monitor-agent.sh start
+ExecStop=/home/youruser/ralphblaster-agent/bin/monitor-agent.sh stop
 Restart=always
 RestartSec=10
 
@@ -274,14 +274,14 @@ WantedBy=multi-user.target
 
 Then:
 ```bash
-sudo systemctl enable ralph-agent
-sudo systemctl start ralph-agent
-sudo systemctl status ralph-agent
+sudo systemctl enable ralphblaster-agent
+sudo systemctl start ralphblaster-agent
+sudo systemctl status ralphblaster-agent
 ```
 
 ## FAQ
 
-**Q: Why not just `ps aux | grep ralph`?**
+**Q: Why not just `ps aux | grep ralphblaster`?**
 A: The monitor shows which agent is YOUR tracked agent vs zombie processes, and warns about multiple agents.
 
 **Q: Can I run multiple agents on purpose?**
@@ -290,13 +290,13 @@ A: Not recommended. Multiple agents compete for the same jobs, causing confusion
 **Q: What if the monitor script itself has issues?**
 A: Emergency fallback:
 ```bash
-pkill -9 -f ralph-agent
-node bin/ralph-agent.js > ~/ralph-agent.log 2>&1 &
-echo $! > ~/.ralph-agent-logs/agent.pid
+pkill -9 -f ralphblaster-agent
+node bin/ralphblaster-agent.js > ~/ralphblaster-agent.log 2>&1 &
+echo $! > ~/.ralphblaster-agent-logs/agent.pid
 ```
 
 **Q: Do I need to remove the loud logging (🔴🔴🔴)?**
-A: It's helpful for debugging, but you can set `RALPH_LOG_LEVEL=warn` to hide it if it's too noisy.
+A: It's helpful for debugging, but you can set `RALPHBLASTER_LOG_LEVEL=warn` to hide it if it's too noisy.
 
 ## Summary
 
@@ -311,7 +311,7 @@ A: It's helpful for debugging, but you can set `RALPH_LOG_LEVEL=warn` to hide it
 
 1. Run `bin/monitor-agent.sh status` - catch multiple agents
 2. Watch `bin/agent-dashboard.sh` - see real-time activity
-3. Check `~/.ralph-agent-logs/` - historical evidence
+3. Check `~/.ralphblaster-agent-logs/` - historical evidence
 
 If PRD jobs are being processed without visible logs, you'll now be able to prove whether:
 - Another agent is doing it (status shows multiple processes)

@@ -8,26 +8,26 @@ Phase 1 of the logging cleanup adds a new API endpoint to send internal operatio
 
 ### 1. Add New API Endpoint
 
-**Route:** `PATCH /api/v1/ralph/jobs/:id/setup_log`
+**Route:** `PATCH /api/v1/ralphblaster/jobs/:id/setup_log`
 
-**Controller:** `Api::V1::RalphJobsController`
+**Controller:** `Api::V1::Ralphblaster::JobsController`
 
 **Action:**
 ```ruby
-# Add to app/controllers/api/v1/ralph_jobs_controller.rb
+# Add to app/controllers/api/v1/ralphblaster_jobs_controller.rb
 
 def add_setup_log
   # Authorize the request (existing before_action should handle this)
-  authorize_ralph_agent!
+  authorize_ralphblaster_agent!
 
   # Get the task associated with this job
-  task = @ralph_job.task
+  task = @ralphblaster_job.task
 
-  # Initialize ralph_logs array if it doesn't exist
-  task.ralph_logs ||= []
+  # Initialize ralphblaster_logs array if it doesn't exist
+  task.ralphblaster_logs ||= []
 
   # Append the new log entry
-  task.ralph_logs << {
+  task.ralphblaster_logs << {
     timestamp: params[:timestamp],
     level: params[:level],        # 'info' or 'error'
     message: params[:message]
@@ -47,8 +47,8 @@ end
 **File:** `config/routes.rb`
 
 ```ruby
-# Inside the existing namespace :api do / namespace :v1 do / resources :ralph do block
-namespace :ralph do
+# Inside the existing namespace :api do / namespace :v1 do / resources :ralphblaster do block
+namespace :ralphblaster do
   resources :jobs, only: [:index, :show, :update] do
     member do
       patch :progress
@@ -62,7 +62,7 @@ end
 
 ### 3. Strong Parameters (if needed)
 
-Add to the private methods section of `RalphJobsController`:
+Add to the private methods section of `Ralphblaster::JobsController`:
 
 ```ruby
 private
@@ -77,13 +77,13 @@ Then update the action to use it:
 def add_setup_log
   authorize_ralph_agent!
 
-  task = @ralph_job.task
-  task.ralph_logs ||= []
+  task = @ralphblaster_job.task
+  task.ralphblaster_logs ||= []
 
   # Use strong parameters
   log_params = setup_log_params
 
-  task.ralph_logs << {
+  task.ralphblaster_logs << {
     timestamp: log_params[:timestamp],
     level: log_params[:level],
     message: log_params[:message]
@@ -109,12 +109,12 @@ end
 
 ### UI Side (No Changes Needed)
 
-The existing UI code in `app/views/tickets/_ralph_progress.html.erb` already displays `task.ralph_logs`:
+The existing UI code in `app/views/tickets/_ralph_progress.html.erb` already displays `task.ralphblaster_logs`:
 
 ```erb
-<% if ticket.ralph_logs.present? %>
+<% if ticket.ralphblaster_logs.present? %>
   <div class="font-mono text-xs space-y-1 max-h-48 overflow-y-auto">
-    <% ticket.ralph_logs.each do |log| %>
+    <% ticket.ralphblaster_logs.each do |log| %>
       <div class="<%= log['level'] == 'error' ? 'text-red-400' : 'text-green-400' %>">
         <%= Time.parse(log['timestamp']).strftime('%H:%M:%S') %> <%= log['message'] %>
       </div>
@@ -123,7 +123,7 @@ The existing UI code in `app/views/tickets/_ralph_progress.html.erb` already dis
 <% end %>
 ```
 
-So once the backend stores logs in `task.ralph_logs`, they automatically appear in the UI!
+So once the backend stores logs in `task.ralphblaster_logs`, they automatically appear in the UI!
 
 ## Expected Result
 
@@ -159,7 +159,7 @@ cd ~/src/ralphblaster
 rails server
 
 # In another terminal, test the endpoint
-curl -X PATCH http://localhost:3000/api/v1/ralph/jobs/1234/setup_log \
+curl -X PATCH http://localhost:3000/api/v1/ralphblaster/jobs/1234/setup_log \
   -H "Authorization: Bearer YOUR_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -169,7 +169,7 @@ curl -X PATCH http://localhost:3000/api/v1/ralph/jobs/1234/setup_log \
   }'
 
 # Should return 200 OK
-# Check task.ralph_logs in rails console
+# Check task.ralphblaster_logs in rails console
 ```
 
 ### 2. Test with Real Agent Execution
