@@ -9,7 +9,7 @@ const { formatDuration } = require('./utils/format');
 const TIMEOUTS = {
   SHUTDOWN_DELAY_MS: 500, // Delay before shutdown
   ERROR_RETRY_DELAY_MS: 5000, // 5 seconds retry delay after errors
-  HEARTBEAT_INTERVAL_MS: 60000, // 60 seconds (1 minute) for heartbeat
+  HEARTBEAT_INTERVAL_MS: 20000, // 20 seconds for heartbeat
   PROGRESS_THROTTLE_MS: 100, // 100ms throttle (max 10 progress updates per second)
   MIN_REQUEST_INTERVAL_MS: 1000, // Minimum 1 second between API requests
 };
@@ -254,7 +254,7 @@ class RalphAgent {
    * @param {number} jobId - Job ID
    */
   startHeartbeat(jobId) {
-    // Send heartbeat every 60 seconds to prevent timeout
+    // Send heartbeat every 20 seconds to maintain online status (backend offline threshold: 35s)
     this.heartbeatInterval = setInterval(async () => {
       try {
         // Calculate elapsed time

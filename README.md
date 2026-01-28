@@ -2,6 +2,15 @@
 
 RalphBlaster Agent is a distributed autonomous coding agent that polls a Rails API for jobs and executes them locally using Claude CLI.
 
+# Requirements
+
+  Compatibility range:
+  - ✅ macOS 10.15+ (any recent version)
+  - ✅ Linux (Ubuntu, Debian, RHEL, Fedora, Arch, etc.)
+  - ✅ Works with different shells (bash, zsh, sh) since it doesn't rely on shell execution
+
+  The only requirement is that users have Node.js 18+, Claude CLI, and Git installed - all of which are readily available on both platforms.
+
 ## Features
 
 - 🔄 **Automatic Job Polling**: Continuously polls the RalphBlaster API for new coding jobs
@@ -123,6 +132,16 @@ ralphblaster
    - **Code Execution**: Creates a RalphBlaster agent instance (see below)
 5. **Completion**: Results are parsed and reported back to the API
 6. **Cleanup**: The agent marks the job as completed or failed and continues polling
+
+### Agent Status System
+
+The agent uses a heartbeat system to maintain connection status with the backend:
+
+- **Heartbeat Interval**: 20 seconds (3 heartbeats per minute)
+- **Offline Threshold**: 35 seconds (backend considers agent offline after this)
+- **Safety Margin**: 15 seconds buffer to prevent false offline readings
+
+This ensures the agent is always shown as "online" in the UI during normal operation, while still detecting real disconnections within 35-40 seconds. Status updates are broadcast in real-time via ActionCable WebSocket connections.
 
 ## RalphBlaster Agent Integration
 
