@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('../../logger');
-const LogFileHelper = require('../../utils/log-file-helper');
+const safeJsonParse = require('secure-json-parse');
+const ProgressParser = require('../../utils/progress-parser');
 
 /**
  * ClarifyingQuestionsHandler - Handles clarifying questions generation jobs
@@ -58,42 +59,74 @@ class ClarifyingQuestionsHandler {
         process.cwd()
       );
 
-      // Setup log file for streaming clarifying questions output
-      logger.info('Setting up log file...');
-      const { logFile, logStream } = await LogFileHelper.createJobLogStream(
-        workingDir,
-        job,
-        startTime,
-        'Clarifying Questions Generation'
-      );
-      logger.info(`Clarifying questions log created at: ${logFile}`);
-
       // Send status event to UI
       if (this.apiClient) {
         await this.apiClient.sendStatusEvent(job.id, 'clarifying_questions_started', 'Generating clarifying questions with Claude...');
       }
 
-      // Create a wrapper onProgress that also writes to log file
-      const logAndProgress = LogFileHelper.createLogAndProgressCallbackStream(
-        logStream,
-        onProgress,
-        logger,
-        { progressMessage: 'Clarifying questions progress' }
-      );
+      // Create ProgressParser for structured milestone tracking
+      const progressParser = new ProgressParser(this.apiClient, job.id, 'clarifying_questions');
+
+      // Create a progress callback that uses ProgressParser
+      let lastOnProgressCall = 0;
+
+      const smartProgress = async (chunk) => {
+        // Send progress to API (best-effort, don't fail on errors)
+        if (this.apiClient) {
+          try {
+            await this.apiClient.sendProgress(job.id, chunk);
+          } catch (err) {
+            logger.debug(`Failed to send progress to API: ${err.message}`);
+          }
+        }
+
+        // Process through ProgressParser for structured milestone updates
+        await progressParser.processChunk(chunk);
+
+        // Backward compatibility for tests
+        if (onProgress) {
+          const isInteresting = /analyzing|identifying|generating|questions/i.test(chunk);
+          const now = Date.now();
+
+          if ((isInteresting && now - lastOnProgressCall >= 1000) || (now - lastOnProgressCall >= 3000)) {
+            const message = progressParser.getLastMilestoneMessage();
+            if (message) {
+              await onProgress(message);
+              lastOnProgressCall = now;
+            } else if (isInteresting) {
+              const cleanMessage = chunk.trim().replace(/\x1b\[[0-9;]*m/g, '').slice(0, 100);
+              if (cleanMessage) {
+                await onProgress(cleanMessage);
+                lastOnProgressCall = now;
+              }
+            }
+          }
+        }
+      };
 
       // Use Claude Code with server-provided template
       logger.info('Invoking Claude Code for clarifying questions generation...');
-      const output = await this.claudeRunner.runClaude(prompt, workingDir, logAndProgress);
+      const result = await this.claudeRunner.runClaudeDirectly(workingDir, prompt, job, smartProgress);
+      const output = result.output;
       logger.info('Claude Code execution completed', {
-        outputLength: output.length,
-        totalChunks: logAndProgress.totalChunks
+        outputLength: output.length
       });
 
       // Validate and parse JSON output
       logger.info('Validating JSON output...');
       let parsedOutput;
       try {
-        parsedOutput = JSON.parse(output);
+        // Security: Validate JSON size before parsing (prevent memory exhaustion)
+        const MAX_JSON_SIZE = 10 * 1024 * 1024; // 10MB
+        if (output.length > MAX_JSON_SIZE) {
+          throw new Error(`JSON output exceeds maximum size of ${MAX_JSON_SIZE} bytes (got ${output.length} bytes)`);
+        }
+
+        // Security: Use safe JSON parser to prevent prototype pollution and limit depth
+        parsedOutput = safeJsonParse.parse(output, null, {
+          protoAction: 'remove',      // Remove __proto__ properties
+          constructorAction: 'remove' // Remove constructor properties
+        });
 
         // Validate structure
         if (!parsedOutput.questions || !Array.isArray(parsedOutput.questions)) {
@@ -109,19 +142,17 @@ class ClarifyingQuestionsHandler {
 
         logger.info('JSON validation successful', { questionCount: parsedOutput.questions.length });
       } catch (parseError) {
-        logger.error('Failed to parse or validate JSON output:', { error: parseError.message, output });
+        logger.error('Failed to parse or validate JSON output:', { error: parseError.message, output: output.slice(0, 500) });
         throw new Error(`Invalid JSON output: ${parseError.message}`);
       }
 
-      // Write completion footer to log
-      logger.info('Writing completion footer to log file...');
-      LogFileHelper.writeCompletionFooterToStream(
-        logStream,
-        'Clarifying Questions Generation',
-        { questionCount: parsedOutput.questions.length }
-      );
-      logStream.end();
-      logger.info(`Clarifying questions log completed: ${logFile}`);
+      // Mark progress as complete
+      await progressParser.markComplete();
+
+      // Flush any remaining progress updates
+      if (this.apiClient) {
+        await this.apiClient.flushProgressBuffer(job.id);
+      }
 
       // Send completion status event
       if (this.apiClient) {

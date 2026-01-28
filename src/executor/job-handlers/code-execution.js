@@ -3,7 +3,6 @@ const fsPromises = require('fs').promises;
 const path = require('path');
 const logger = require('../../logger');
 const WorktreeManager = require('../../worktree-manager');
-const LogFileHelper = require('../../utils/log-file-helper');
 
 /**
  * Handles code execution jobs
@@ -91,27 +90,13 @@ class CodeExecutionHandler {
       // Log git activity details and send to server
       const gitActivitySummary = await this.gitHelper.logGitActivity(worktreePath, result.branchName, job.id, onProgress);
 
-      // Save execution output to persistent log file (survives cleanup)
-      try {
-        const logFile = await LogFileHelper.createJobLogWithContent(
-          sanitizedPath,
-          job,
-          startTime,
-          'Code Execution',
-          result.output
-        );
-        logger.info(`Execution log saved to: ${logFile}`);
+      // Flush any remaining progress updates
+      if (this.apiClient) {
+        await this.apiClient.flushProgressBuffer(job.id);
+      }
 
-        // Save stderr to separate error log if it exists
-        const stderrContent = this.claudeRunner.capturedStderr || '';
-        if (stderrContent.trim()) {
-          const logDir = path.join(sanitizedPath, '.rb-logs');
-          const errorLogFile = path.join(logDir, `job-${job.id}-stderr.log`);
-          await fsPromises.writeFile(errorLogFile, stderrContent);
-          logger.info(`Error output saved to: ${errorLogFile}`);
-        }
-      } catch (logError) {
-        logger.warn(`Failed to save execution log: ${logError.message}`);
+      // Note: Output is already sent to API in real-time via onProgress callback
+      // No need to save to log files - server handles storage and broadcasting
       }
 
       const executionTimeMs = Date.now() - startTime;
@@ -139,37 +124,8 @@ class CodeExecutionHandler {
     } catch (error) {
       logger.error(`Code implementation failed for job #${job.id}: ${error.message}`);
 
-      // Save error details to log file
-      const logDir = path.join(job.project.system_path, '.rb-logs');
-      try {
-        await fsPromises.mkdir(logDir, { recursive: true });
-        const errorLogFile = path.join(logDir, `job-${job.id}-error.log`);
-        const errorContent = `
-═══════════════════════════════════════════════════════════
-Job #${job.id} - FAILED
-Error Time: ${new Date().toISOString()}
-═══════════════════════════════════════════════════════════
-
-Error Message: ${error.message}
-
-Error Category: ${error.category || 'unknown'}
-
-Technical Details:
-${error.technicalDetails || error.stack || 'No additional details'}
-
-Partial Output:
-${error.partialOutput || 'No output captured'}
-
-Captured Stderr:
-${this.claudeRunner.capturedStderr || 'No stderr captured'}
-
-═══════════════════════════════════════════════════════════
-`;
-        await fsPromises.writeFile(errorLogFile, errorContent);
-        logger.info(`Error details saved to: ${errorLogFile}`);
-      } catch (logError) {
-        logger.warn(`Failed to save error log: ${logError.message}`);
-      }
+      // Error details are already sent to server via API and logged there
+      // No need to save to local files
 
       throw error;
     } finally {
