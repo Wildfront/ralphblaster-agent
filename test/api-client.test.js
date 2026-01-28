@@ -207,12 +207,19 @@ describe('ApiClient', () => {
       });
     });
 
-    test('throws error on API failure', async () => {
-      mockAxiosInstance.patch.mockRejectedValue(new Error('API error'));
+    test('throws error on API failure after retries', async () => {
+      // Mock to always fail with a retryable error
+      const error = new Error('API error');
+      error.response = { status: 503 }; // Service unavailable - retryable
+      mockAxiosInstance.patch.mockRejectedValue(error);
 
+      // Will retry 3 times with exponential backoff, then throw
       await expect(apiClient.markJobCompleted(1, { output: '', executionTimeMs: 0 }))
         .rejects.toThrow('API error');
-    });
+
+      // Should have been called 4 times total (initial + 3 retries)
+      expect(mockAxiosInstance.patch).toHaveBeenCalledTimes(4);
+    }, 10000); // Increase timeout for retries
   });
 
   describe('markJobFailed()', () => {
@@ -228,12 +235,17 @@ describe('ApiClient', () => {
       });
     });
 
-    test('does not throw on API error', async () => {
-      mockAxiosInstance.patch.mockRejectedValue(new Error('API error'));
+    test('does not throw on API error after retries', async () => {
+      const error = new Error('API error');
+      error.response = { status: 503 }; // Service unavailable - retryable
+      mockAxiosInstance.patch.mockRejectedValue(error);
 
-      // Should not throw
+      // Should not throw - markJobFailed swallows errors
       await expect(apiClient.markJobFailed(1, 'Error')).resolves.toBeUndefined();
-    });
+
+      // Should have been called 4 times (initial + 3 retries)
+      expect(mockAxiosInstance.patch).toHaveBeenCalledTimes(4);
+    }, 10000); // Increase timeout for retries
   });
 
   describe('sendHeartbeat()', () => {

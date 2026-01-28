@@ -216,6 +216,9 @@ describe('ApiClient Edge Cases', () => {
 
   describe('markJobCompleted() edge cases', () => {
     test('includes only prd_content for prd jobs', async () => {
+      // Mock progress batch flush (called before marking complete)
+      mockAxiosInstance.post.mockResolvedValue({});
+
       mockAxiosInstance.patch.mockResolvedValue({
         status: 200,
         data: { success: true }
@@ -241,6 +244,9 @@ describe('ApiClient Edge Cases', () => {
     });
 
     test('includes summary and branch for code jobs', async () => {
+      // Mock progress batch flush (called before marking complete)
+      mockAxiosInstance.post.mockResolvedValue({});
+
       mockAxiosInstance.patch.mockResolvedValue({
         status: 200,
         data: { success: true }
@@ -268,6 +274,9 @@ describe('ApiClient Edge Cases', () => {
     });
 
     test('handles missing optional fields gracefully', async () => {
+      // Mock progress batch flush (called before marking complete)
+      mockAxiosInstance.post.mockResolvedValue({});
+
       mockAxiosInstance.patch.mockResolvedValue({
         status: 200,
         data: { success: true }
@@ -292,6 +301,9 @@ describe('ApiClient Edge Cases', () => {
     });
 
     test('includes all fields when present', async () => {
+      // Mock progress batch flush (called before marking complete)
+      mockAxiosInstance.post.mockResolvedValue({});
+
       mockAxiosInstance.patch.mockResolvedValue({
         status: 200,
         data: { success: true }
@@ -323,6 +335,9 @@ describe('ApiClient Edge Cases', () => {
 
   describe('markJobFailed() error handling', () => {
     test('does not throw when API call fails', async () => {
+      // Mock progress batch flush (called before marking failed)
+      mockAxiosInstance.post.mockResolvedValue({});
+
       mockAxiosInstance.patch.mockRejectedValue(
         new Error('Network error')
       );
@@ -331,9 +346,12 @@ describe('ApiClient Edge Cases', () => {
       await expect(
         apiClient.markJobFailed(123, 'Job failed', null)
       ).resolves.toBeUndefined();
-    });
+    }, 10000); // Increase timeout to handle retry delays
 
     test('handles null partial output', async () => {
+      // Mock progress batch flush (called before marking failed)
+      mockAxiosInstance.post.mockResolvedValue({});
+
       mockAxiosInstance.patch.mockResolvedValue({
         status: 200,
         data: { success: true }
@@ -352,6 +370,9 @@ describe('ApiClient Edge Cases', () => {
     });
 
     test('includes partial output when provided', async () => {
+      // Mock progress batch flush (called before marking failed)
+      mockAxiosInstance.post.mockResolvedValue({});
+
       mockAxiosInstance.patch.mockResolvedValue({
         status: 200,
         data: { success: true }

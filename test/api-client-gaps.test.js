@@ -221,36 +221,46 @@ describe('ApiClient - Coverage Gaps', () => {
   });
 
   describe('sendProgress()', () => {
-    test('sends progress endpoint call', async () => {
-      mockAxiosInstance.patch.mockResolvedValue({});
+    test('buffers progress and sends on flush', async () => {
+      mockAxiosInstance.post.mockResolvedValue({});
 
       await apiClient.sendProgress(123, 'Progress chunk');
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/123/progress',
-        { chunk: 'Progress chunk' }
+      // Should not have called API yet (buffered)
+      expect(mockAxiosInstance.post).not.toHaveBeenCalled();
+
+      // Manually flush to send batch
+      await apiClient.flushProgressBuffer(123);
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+        '/api/v1/ralphblaster/jobs/123/progress_batch',
+        { updates: [{ chunk: 'Progress chunk', timestamp: expect.any(Number) }] }
       );
     });
 
     test('handles errors with warning, does not throw', async () => {
       const logger = require('../src/logger');
-      mockAxiosInstance.patch.mockRejectedValue(new Error('Network error'));
+      const error = new Error('Network error');
+      error.response = { status: 503 };
+      mockAxiosInstance.post.mockRejectedValue(error);
 
       await apiClient.sendProgress(123, 'chunk');
+      await apiClient.flushProgressBuffer(123);
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Error sending progress for job #123: Network error')
+        expect.stringContaining('Error sending batched progress for job #123: Network error')
       );
     });
 
-    test('logs debug message on success', async () => {
+    test('logs debug message on successful batch send', async () => {
       const logger = require('../src/logger');
-      mockAxiosInstance.patch.mockResolvedValue({});
+      mockAxiosInstance.post.mockResolvedValue({});
 
       await apiClient.sendProgress(456, 'chunk');
+      await apiClient.flushProgressBuffer(456);
 
       expect(logger.debug).toHaveBeenCalledWith(
-        'Progress sent for job #456'
+        'Batched 1 progress updates for job #456'
       );
     });
   });

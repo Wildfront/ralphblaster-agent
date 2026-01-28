@@ -38,21 +38,27 @@ describe('ApiClient Progress Updates', () => {
 
   describe('sendProgress()', () => {
     test('sends progress update successfully', async () => {
-      mockAxiosInstance.patch.mockResolvedValue({
+      mockAxiosInstance.post.mockResolvedValue({
         status: 200,
         data: { success: true }
       });
 
       await apiClient.sendProgress(123, 'Some output chunk');
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/123/progress',
-        { chunk: 'Some output chunk' }
+      // Should be buffered, not sent yet
+      expect(mockAxiosInstance.post).not.toHaveBeenCalled();
+
+      // Flush buffer to send batch
+      await apiClient.flushProgressBuffer(123);
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+        '/api/v1/ralphblaster/jobs/123/progress_batch',
+        { updates: [{ chunk: 'Some output chunk', timestamp: expect.any(Number) }] }
       );
     });
 
     test('sends multiple progress chunks for same job', async () => {
-      mockAxiosInstance.patch.mockResolvedValue({
+      mockAxiosInstance.post.mockResolvedValue({
         status: 200,
         data: { success: true }
       });
@@ -61,40 +67,44 @@ describe('ApiClient Progress Updates', () => {
       await apiClient.sendProgress(456, 'Chunk 2\n');
       await apiClient.sendProgress(456, 'Chunk 3\n');
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledTimes(3);
-      expect(mockAxiosInstance.patch).toHaveBeenNthCalledWith(
-        1,
-        '/api/v1/ralphblaster/jobs/456/progress',
-        { chunk: 'Chunk 1\n' }
-      );
-      expect(mockAxiosInstance.patch).toHaveBeenNthCalledWith(
-        2,
-        '/api/v1/ralphblaster/jobs/456/progress',
-        { chunk: 'Chunk 2\n' }
-      );
-      expect(mockAxiosInstance.patch).toHaveBeenNthCalledWith(
-        3,
-        '/api/v1/ralphblaster/jobs/456/progress',
-        { chunk: 'Chunk 3\n' }
+      // Should be buffered, not sent yet
+      expect(mockAxiosInstance.post).not.toHaveBeenCalled();
+
+      // Flush buffer to send all chunks in one batch
+      await apiClient.flushProgressBuffer(456);
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledTimes(1);
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+        '/api/v1/ralphblaster/jobs/456/progress_batch',
+        {
+          updates: [
+            { chunk: 'Chunk 1\n', timestamp: expect.any(Number) },
+            { chunk: 'Chunk 2\n', timestamp: expect.any(Number) },
+            { chunk: 'Chunk 3\n', timestamp: expect.any(Number) }
+          ]
+        }
       );
     });
 
     test('handles empty chunk', async () => {
-      mockAxiosInstance.patch.mockResolvedValue({
+      mockAxiosInstance.post.mockResolvedValue({
         status: 200,
         data: { success: true }
       });
 
       await apiClient.sendProgress(789, '');
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/789/progress',
-        { chunk: '' }
+      // Flush buffer to send batch
+      await apiClient.flushProgressBuffer(789);
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+        '/api/v1/ralphblaster/jobs/789/progress_batch',
+        { updates: [{ chunk: '', timestamp: expect.any(Number) }] }
       );
     });
 
     test('handles large chunk', async () => {
-      mockAxiosInstance.patch.mockResolvedValue({
+      mockAxiosInstance.post.mockResolvedValue({
         status: 200,
         data: { success: true }
       });
@@ -103,9 +113,12 @@ describe('ApiClient Progress Updates', () => {
 
       await apiClient.sendProgress(111, largeChunk);
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/111/progress',
-        { chunk: largeChunk }
+      // Flush buffer to send batch
+      await apiClient.flushProgressBuffer(111);
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+        '/api/v1/ralphblaster/jobs/111/progress_batch',
+        { updates: [{ chunk: largeChunk, timestamp: expect.any(Number) }] }
       );
     });
 
@@ -146,7 +159,7 @@ describe('ApiClient Progress Updates', () => {
     });
 
     test('handles chunks with special characters', async () => {
-      mockAxiosInstance.patch.mockResolvedValue({
+      mockAxiosInstance.post.mockResolvedValue({
         status: 200,
         data: { success: true }
       });
@@ -155,14 +168,17 @@ describe('ApiClient Progress Updates', () => {
 
       await apiClient.sendProgress(555, specialChunk);
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/555/progress',
-        { chunk: specialChunk }
+      // Flush buffer to send batch
+      await apiClient.flushProgressBuffer(555);
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+        '/api/v1/ralphblaster/jobs/555/progress_batch',
+        { updates: [{ chunk: specialChunk, timestamp: expect.any(Number) }] }
       );
     });
 
     test('handles unicode characters in chunk', async () => {
-      mockAxiosInstance.patch.mockResolvedValue({
+      mockAxiosInstance.post.mockResolvedValue({
         status: 200,
         data: { success: true }
       });
@@ -171,9 +187,12 @@ describe('ApiClient Progress Updates', () => {
 
       await apiClient.sendProgress(666, unicodeChunk);
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/666/progress',
-        { chunk: unicodeChunk }
+      // Flush buffer to send batch
+      await apiClient.flushProgressBuffer(666);
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+        '/api/v1/ralphblaster/jobs/666/progress_batch',
+        { updates: [{ chunk: unicodeChunk, timestamp: expect.any(Number) }] }
       );
     });
   });
