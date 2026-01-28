@@ -97,7 +97,6 @@ class CodeExecutionHandler {
 
       // Note: Output is already sent to API in real-time via onProgress callback
       // No need to save to log files - server handles storage and broadcasting
-      }
 
       const executionTimeMs = Date.now() - startTime;
 
