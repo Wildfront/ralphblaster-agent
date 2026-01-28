@@ -31,4 +31,13 @@ if (!config.apiToken) {
   throw new Error(errorMessage);
 }
 
+// Security: Ensure TLS certificate validation is enabled
+if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0') {
+  throw new Error(
+    'CRITICAL SECURITY ERROR: TLS certificate validation is disabled!\n' +
+    'NODE_TLS_REJECT_UNAUTHORIZED=0 is extremely dangerous and allows man-in-the-middle attacks.\n' +
+    'Remove this environment variable immediately.'
+  );
+}
+
 module.exports = config;
