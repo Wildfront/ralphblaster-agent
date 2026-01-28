@@ -12,6 +12,8 @@ const FileDestination = require('./file-destination');
 const ApiDestination = require('./api-destination');
 const BatchedDestination = require('./batched-destination');
 const ApiDestinationUnbatched = require('./api-destination-unbatched');
+const ProgressBatchDestination = require('./progress-batch-destination');
+const ProgressBatchDestinationUnbatched = require('./progress-batch-destination-unbatched');
 const LogManager = require('../log-manager');
 
 module.exports = {
@@ -21,5 +23,7 @@ module.exports = {
   ApiDestination,
   BatchedDestination,
   ApiDestinationUnbatched,
+  ProgressBatchDestination,
+  ProgressBatchDestinationUnbatched,
   LogManager
 };
