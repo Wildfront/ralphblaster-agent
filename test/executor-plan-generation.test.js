@@ -17,13 +17,19 @@ jest.mock('../src/logger', () => ({
   info: jest.fn(),
   debug: jest.fn(),
   warn: jest.fn(),
-  error: jest.fn()
+  error: jest.fn(),
+  event: jest.fn()
 }));
 jest.mock('../src/utils/log-file-helper', () => ({
   createJobLogStream: jest.fn(),
   writeCompletionFooterToStream: jest.fn(),
   createLogAndProgressCallbackStream: jest.fn()
 }));
+jest.mock('../src/executor/git-helper', () => {
+  return jest.fn().mockImplementation(() => ({
+    getCurrentBranch: jest.fn().mockResolvedValue('test-branch')
+  }));
+});
 
 describe('Executor - Plan Generation', () => {
   let executor;

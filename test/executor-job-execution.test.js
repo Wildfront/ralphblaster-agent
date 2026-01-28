@@ -33,8 +33,16 @@ jest.mock('../src/logger', () => ({
   info: jest.fn(),
   debug: jest.fn(),
   warn: jest.fn(),
-  error: jest.fn()
+  error: jest.fn(),
+  event: jest.fn()
 }));
+
+// Mock GitHelper
+jest.mock('../src/executor/git-helper', () => {
+  return jest.fn().mockImplementation(() => ({
+    getCurrentBranch: jest.fn().mockResolvedValue('test-branch')
+  }));
+});
 
 describe('Executor - Job Execution', () => {
   let executor;
