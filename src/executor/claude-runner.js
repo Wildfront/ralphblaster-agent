@@ -321,22 +321,16 @@ class ClaudeRunner {
         const chunk = data.toString();
         output += chunk;
 
-
-        // Stream progress to API in real-time (raw terminal output)
-        if (this.apiClient) {
+        // Call onProgress callback if provided (it will handle API streaming with throttling)
+        if (onProgress) {
+          onProgress(chunk);
+        } else if (this.apiClient) {
+          // Only send directly to API if no onProgress callback (prevents duplicate updates)
           try {
-            await this.apiClient.sendProgress(job.id, chunk, {
-              component: 'claude',
-              operation: 'execution'
-            });
+            await this.apiClient.sendProgress(job.id, chunk);
           } catch (err) {
             logger.warn(`Failed to send progress to API: ${err.message}`);
           }
-        }
-
-        // Call onProgress callback (for backwards compatibility)
-        if (onProgress) {
-          onProgress(chunk);
         }
       });
 
@@ -350,21 +344,16 @@ class ClaudeRunner {
         // Log stderr but don't treat as JSON
         process.stderr.write(chunk);
 
-        // Stream stderr to API in real-time (Claude's interactive output comes on stderr)
-        if (this.apiClient) {
+        // Call onProgress callback if provided (it will handle API streaming with throttling)
+        if (onProgress) {
+          onProgress(chunk);
+        } else if (this.apiClient) {
+          // Only send directly to API if no onProgress callback (prevents duplicate updates)
           try {
-            await this.apiClient.sendProgress(job.id, chunk, {
-              component: 'claude',
-              operation: 'execution'
-            });
+            await this.apiClient.sendProgress(job.id, chunk);
           } catch (err) {
             logger.warn(`Failed to send stderr progress to API: ${err.message}`);
           }
-        }
-
-        // Call onProgress callback for stderr (for backwards compatibility)
-        if (onProgress) {
-          onProgress(chunk);
         }
       });
 
