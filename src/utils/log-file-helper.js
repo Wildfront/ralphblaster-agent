@@ -11,7 +11,7 @@ class LogFileHelper {
   /**
    * Creates a job log file with standard header format using write streams
    * Recommended for real-time streaming of long-running job outputs (e.g., LLM streaming).
-   * Creates .ralph-logs directory if it doesn't exist.
+   * Creates .rb-logs directory if it doesn't exist.
    * @param {string} workingDir - Working directory where logs should be created
    * @param {Object} job - Job object containing id and task_title properties
    * @param {number} startTime - Job start timestamp (milliseconds since epoch)
@@ -26,8 +26,8 @@ class LogFileHelper {
    *   );
    */
   static async createJobLogStream(workingDir, job, startTime, jobType) {
-    // Create .ralph-logs directory
-    const logDir = path.join(workingDir, '.ralph-logs');
+    // Create .rb-logs directory
+    const logDir = path.join(workingDir, '.rb-logs');
     await fsPromises.mkdir(logDir, { recursive: true });
 
     // Create log file path
@@ -52,7 +52,7 @@ Started: ${new Date(startTime).toISOString()}
    * Creates a job log file with standard header format using fsPromises (for code-execution.js)
    * Recommended for jobs with complete output available upfront (non-streaming).
    * Writes header, content, and footer in a single operation.
-   * Creates .ralph-logs directory if it doesn't exist.
+   * Creates .rb-logs directory if it doesn't exist.
    * @param {string} workingDir - Working directory where logs should be created
    * @param {Object} job - Job object containing id and task_title properties
    * @param {number} startTime - Job start timestamp (milliseconds since epoch)
@@ -69,8 +69,8 @@ Started: ${new Date(startTime).toISOString()}
    *   );
    */
   static async createJobLogWithContent(workingDir, job, startTime, jobType, content) {
-    // Create .ralph-logs directory
-    const logDir = path.join(workingDir, '.ralph-logs');
+    // Create .rb-logs directory
+    const logDir = path.join(workingDir, '.rb-logs');
     await fsPromises.mkdir(logDir, { recursive: true });
 
     // Create log file path

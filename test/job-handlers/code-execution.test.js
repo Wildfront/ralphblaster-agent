@@ -574,15 +574,15 @@ describe('CodeExecutionHandler', () => {
         await handler.executeCodeImplementation(job, mockOnProgress, startTime);
 
         expect(fsPromises.mkdir).toHaveBeenCalledWith(
-          '/test/project/.ralph-logs',
+          '/test/project/.rb-logs',
           { recursive: true }
         );
         expect(fsPromises.writeFile).toHaveBeenCalledWith(
-          '/test/project/.ralph-logs/job-1.log',
+          '/test/project/.rb-logs/job-1.log',
           expect.stringContaining('Claude output here')
         );
         expect(fsPromises.writeFile).toHaveBeenCalledWith(
-          '/test/project/.ralph-logs/job-1.log',
+          '/test/project/.rb-logs/job-1.log',
           expect.stringContaining('Job #1 - Test Task')
         );
       });
@@ -608,7 +608,7 @@ describe('CodeExecutionHandler', () => {
         await handler.executeCodeImplementation(job, mockOnProgress, startTime);
 
         expect(fsPromises.writeFile).toHaveBeenCalledWith(
-          '/test/project/.ralph-logs/job-1-stderr.log',
+          '/test/project/.rb-logs/job-1-stderr.log',
           'Some error output'
         );
       });
@@ -656,15 +656,15 @@ describe('CodeExecutionHandler', () => {
           .rejects.toThrow('Execution failed');
 
         expect(fsPromises.writeFile).toHaveBeenCalledWith(
-          '/test/project/.ralph-logs/job-1-error.log',
+          '/test/project/.rb-logs/job-1-error.log',
           expect.stringContaining('Job #1 - FAILED')
         );
         expect(fsPromises.writeFile).toHaveBeenCalledWith(
-          '/test/project/.ralph-logs/job-1-error.log',
+          '/test/project/.rb-logs/job-1-error.log',
           expect.stringContaining('Execution failed')
         );
         expect(fsPromises.writeFile).toHaveBeenCalledWith(
-          '/test/project/.ralph-logs/job-1-error.log',
+          '/test/project/.rb-logs/job-1-error.log',
           expect.stringContaining('execution_error')
         );
       });

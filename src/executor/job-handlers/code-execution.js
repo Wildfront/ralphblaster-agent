@@ -105,7 +105,7 @@ class CodeExecutionHandler {
         // Save stderr to separate error log if it exists
         const stderrContent = this.claudeRunner.capturedStderr || '';
         if (stderrContent.trim()) {
-          const logDir = path.join(sanitizedPath, '.ralph-logs');
+          const logDir = path.join(sanitizedPath, '.rb-logs');
           const errorLogFile = path.join(logDir, `job-${job.id}-stderr.log`);
           await fsPromises.writeFile(errorLogFile, stderrContent);
           logger.info(`Error output saved to: ${errorLogFile}`);
@@ -140,7 +140,7 @@ class CodeExecutionHandler {
       logger.error(`Code implementation failed for job #${job.id}: ${error.message}`);
 
       // Save error details to log file
-      const logDir = path.join(job.project.system_path, '.ralph-logs');
+      const logDir = path.join(job.project.system_path, '.rb-logs');
       try {
         await fsPromises.mkdir(logDir, { recursive: true });
         const errorLogFile = path.join(logDir, `job-${job.id}-error.log`);

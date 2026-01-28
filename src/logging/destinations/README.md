@@ -47,7 +47,7 @@ const destination = new ConsoleDestination({
 
 ### FileDestination
 
-Writes logs to job-specific files in `.ralph-logs/` directory.
+Writes logs to job-specific files in `.rb-logs/` directory.
 
 **Configuration:**
 ```javascript

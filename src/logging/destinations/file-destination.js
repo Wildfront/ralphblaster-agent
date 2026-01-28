@@ -8,7 +8,7 @@ const fsPromises = require('fs').promises;
  *
  * Wraps LogFileHelper to provide file-based logging through the destination interface.
  * Supports both streaming (for real-time output) and batch writing modes.
- * Each job gets its own log file in the .ralph-logs directory.
+ * Each job gets its own log file in the .rb-logs directory.
  */
 class FileDestination extends BaseDestination {
   /**

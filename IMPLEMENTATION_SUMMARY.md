@@ -215,7 +215,7 @@ Cleanup & report
 - [ ] Plan generation still works (unchanged code path)
 - [ ] Multi-agent spawning still works
 - [ ] Graceful shutdown still works
-- [ ] Logging to .ralph-logs still works
+- [ ] Logging to .rb-logs still works
 - [ ] Error logs still saved correctly
 
 ## Migration Notes
