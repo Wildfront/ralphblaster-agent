@@ -22,6 +22,20 @@ class ApiClient {
     this.agentId = agentId;
     this.useNewEndpoints = true; // Start with new endpoints, fall back if needed
 
+    // Rate limiting backoff tracking per endpoint category
+    this.rateLimitBackoff = {
+      jobs: 0,      // /jobs/* endpoints
+      progress: 0,  // /jobs/*/progress endpoints
+      events: 0,    // /jobs/*/events endpoints
+      metadata: 0   // /jobs/*/metadata endpoints
+    };
+
+    // Progress batching
+    this.progressBuffer = new Map(); // jobId -> [{chunk, timestamp}, ...]
+    this.progressTimers = new Map(); // jobId -> timer
+    this.BATCH_INTERVAL_MS = 200; // Send batches every 200ms
+    this.MAX_BATCH_SIZE = 50; // Max chunks per batch
+
     this.client = axios.create({
       baseURL: config.apiUrl,
       headers: {
@@ -53,6 +67,99 @@ class ApiClient {
         return Promise.reject(error);
       }
     );
+  }
+
+  /**
+   * Get endpoint category for rate limit tracking
+   * @param {string} path - API path
+   * @returns {string} Category name
+   */
+  getEndpointCategory(path) {
+    if (path.includes('/progress')) return 'progress';
+    if (path.includes('/events')) return 'events';
+    if (path.includes('/metadata')) return 'metadata';
+    return 'jobs';
+  }
+
+  /**
+   * Check if error is retryable
+   * @param {Error} error - Error object
+   * @returns {boolean} True if should retry
+   */
+  isRetryableError(error) {
+    if (!error.response) return true; // Network error - retry
+    const status = error.response.status;
+    // Retry on rate limits, timeouts, and server errors
+    return status === 408 || status === 429 || status === 502 || status === 503 || status === 504;
+  }
+
+  /**
+   * Make an API request with automatic retry and rate limit handling
+   * @param {string} method - HTTP method (get, post, patch, etc.)
+   * @param {string} path - Endpoint path (e.g., '/jobs/next' or '/jobs/{id}')
+   * @param {Object} data - Request data (for POST/PATCH)
+   * @param {Object} config - Axios config options
+   * @param {number} maxRetries - Maximum retry attempts (default: 3)
+   * @returns {Promise<Object>} Response object
+   */
+  async requestWithRetry(method, path, data = null, config = null, maxRetries = 3) {
+    const category = this.getEndpointCategory(path);
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        // Check if we're in backoff period for this endpoint category
+        const backoffUntil = this.rateLimitBackoff[category] || 0;
+        const now = Date.now();
+
+        if (now < backoffUntil) {
+          const waitMs = backoffUntil - now;
+          logger.warn(`Rate limit backoff active for ${category}, waiting ${waitMs}ms`);
+          await new Promise(resolve => setTimeout(resolve, waitMs));
+        }
+
+        // Make the request using existing fallback logic
+        return await this.requestWithFallback(method, path, data, config);
+
+      } catch (error) {
+        const isLastAttempt = attempt === maxRetries;
+
+        // Handle rate limiting
+        if (error.response?.status === 429) {
+          // Get retry-after header (in seconds) or use exponential backoff
+          const retryAfter = error.response.headers['retry-after'];
+          const backoffMs = retryAfter
+            ? parseInt(retryAfter) * 1000
+            : Math.min(1000 * Math.pow(2, attempt), 30000); // 1s, 2s, 4s, max 30s
+
+          logger.warn(
+            `Rate limited on ${path} (attempt ${attempt + 1}/${maxRetries + 1}), ` +
+            `backing off ${backoffMs}ms`
+          );
+
+          // Set backoff for this endpoint category
+          this.rateLimitBackoff[category] = Date.now() + backoffMs;
+
+          if (!isLastAttempt) {
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
+            continue;
+          }
+        }
+
+        // Handle other retryable errors
+        if (this.isRetryableError(error) && !isLastAttempt) {
+          const backoffMs = 1000 * Math.pow(2, attempt); // Exponential: 1s, 2s, 4s
+          logger.warn(
+            `Retryable error on ${path} (${error.message}), ` +
+            `retry ${attempt + 1}/${maxRetries + 1} after ${backoffMs}ms`
+          );
+          await new Promise(resolve => setTimeout(resolve, backoffMs));
+          continue;
+        }
+
+        // Not retryable or last attempt - throw
+        throw error;
+      }
+    }
   }
 
   /**
@@ -232,6 +339,9 @@ class ApiClient {
    * @param {Object} result - Job result containing output, summary, etc.
    */
   async markJobCompleted(jobId, result) {
+    // Flush any remaining progress updates before marking complete
+    await this.flushProgressBuffer(jobId);
+
     try {
       logger.debug(`Building completion payload for job #${jobId}...`, {
         hasOutput: !!result.output,
@@ -292,7 +402,7 @@ class ApiClient {
         payloadSize: JSON.stringify(payload).length
       });
 
-      await this.requestWithFallback('patch', `/jobs/${jobId}`, payload);
+      await this.requestWithRetry('patch', `/jobs/${jobId}`, payload, null, 3);
       logger.info(`✓ Job #${jobId} successfully marked as completed in API`);
     } catch (error) {
       logger.error(`✗ Failed to mark job #${jobId} as completed in API`, {
@@ -312,6 +422,9 @@ class ApiClient {
    * @param {string} partialOutput - Partial output if any
    */
   async markJobFailed(jobId, error, partialOutput = null) {
+    // Flush any remaining progress updates before marking failed
+    await this.flushProgressBuffer(jobId);
+
     try {
       // Support both Error objects and string messages for backward compatibility
       const errorMessage = typeof error === 'string' ? error : error.message || String(error);
@@ -354,7 +467,7 @@ class ApiClient {
         hasErrorDetails: !!payload.error_details
       });
 
-      await this.requestWithFallback('patch', `/jobs/${jobId}`, payload);
+      await this.requestWithRetry('patch', `/jobs/${jobId}`, payload, null, 3);
       logger.info(`✓ Job #${jobId} successfully marked as failed in API with category: ${payload.error_category || 'unknown'}`);
     } catch (apiError) {
       logger.error(`✗ Failed to mark job #${jobId} as failed in API (meta-failure!)`, {
@@ -385,17 +498,69 @@ class ApiClient {
 
   /**
    * Send progress update for job (streaming Claude output)
+   * Batches chunks for efficiency
    * @param {number} jobId - Job ID
    * @param {string} chunk - Output chunk
    */
   async sendProgress(jobId, chunk) {
+    // Initialize buffer for this job if needed
+    if (!this.progressBuffer.has(jobId)) {
+      this.progressBuffer.set(jobId, []);
+    }
+
+    // Add chunk to buffer with timestamp
+    const buffer = this.progressBuffer.get(jobId);
+    buffer.push({
+      chunk,
+      timestamp: Date.now()
+    });
+
+    // Flush immediately if buffer is full
+    if (buffer.length >= this.MAX_BATCH_SIZE) {
+      await this.flushProgressBuffer(jobId);
+      return;
+    }
+
+    // Otherwise, schedule batch send if not already scheduled
+    if (!this.progressTimers.has(jobId)) {
+      const timer = setTimeout(() => {
+        this.flushProgressBuffer(jobId).catch(err => {
+          logger.debug(`Error flushing progress buffer: ${err.message}`);
+        });
+      }, this.BATCH_INTERVAL_MS);
+      this.progressTimers.set(jobId, timer);
+    }
+  }
+
+  /**
+   * Flush buffered progress updates for a job
+   * @param {number} jobId - Job ID
+   */
+  async flushProgressBuffer(jobId) {
+    // Clear timer if it exists
+    const timer = this.progressTimers.get(jobId);
+    if (timer) {
+      clearTimeout(timer);
+      this.progressTimers.delete(jobId);
+    }
+
+    // Get buffer
+    const buffer = this.progressBuffer.get(jobId);
+    if (!buffer || buffer.length === 0) return;
+
+    // Clear buffer immediately to prevent duplicates
+    this.progressBuffer.set(jobId, []);
+
     try {
-      await this.requestWithFallback('patch', `/jobs/${jobId}/progress`, {
-        chunk: chunk
-      });
-      logger.debug(`Progress sent for job #${jobId}`);
+      // Send batched updates
+      await this.requestWithRetry('post', `/jobs/${jobId}/progress_batch`, {
+        updates: buffer
+      }, null, 2);
+
+      logger.debug(`Batched ${buffer.length} progress updates for job #${jobId}`);
     } catch (error) {
-      logger.warn(`Error sending progress for job #${jobId}: ${error.message}`);
+      logger.warn(`Error sending batched progress for job #${jobId}: ${error.message}`);
+      // Don't throw - progress updates are best-effort
     }
   }
 
@@ -408,11 +573,12 @@ class ApiClient {
    */
   async sendStatusEvent(jobId, eventType, message, metadata = {}) {
     try {
-      await this.requestWithFallback('post', `/jobs/${jobId}/events`, {
+      // Use retry with 2 attempts for status events (best-effort)
+      await this.requestWithRetry('post', `/jobs/${jobId}/events`, {
         event_type: eventType,
         message: message,
         metadata: metadata
-      });
+      }, null, 2);
       logger.debug(`Status event sent for job #${jobId}: ${eventType} - ${message}`);
     } catch (error) {
       logger.warn(`Error sending status event for job #${jobId}: ${error.message}`);
