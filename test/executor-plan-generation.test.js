@@ -42,7 +42,7 @@ describe('Executor - Plan Generation', () => {
     };
 
     LogFileHelper.createJobLogStream.mockResolvedValue({
-      logFile: '/test/.ralph-logs/job-1.log',
+      logFile: '/test/.rb-logs/job-1.log',
       logStream: mockStream
     });
 

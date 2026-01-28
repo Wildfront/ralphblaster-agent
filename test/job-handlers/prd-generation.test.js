@@ -53,7 +53,7 @@ describe('PrdGenerationHandler', () => {
 
     // Setup LogFileHelper mocks to return stream
     LogFileHelper.createJobLogStream.mockResolvedValue({
-      logFile: '/test/.ralph-logs/job-123.log',
+      logFile: '/test/.rb-logs/job-123.log',
       logStream: mockStream
     });
 
@@ -426,7 +426,7 @@ describe('PrdGenerationHandler', () => {
       };
 
       LogFileHelper.createJobLogStream.mockResolvedValue({
-        logFile: '/test/.ralph-logs/job-1.log',
+        logFile: '/test/.rb-logs/job-1.log',
         logStream: errorStream
       });
 
@@ -693,7 +693,7 @@ describe('PrdGenerationHandler', () => {
       };
 
       LogFileHelper.createJobLogStream.mockResolvedValue({
-        logFile: '/test/.ralph-logs/job-1.log',
+        logFile: '/test/.rb-logs/job-1.log',
         logStream: errorStream
       });
 
