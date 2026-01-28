@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const safeJsonParse = require('secure-json-parse');
 
 /**
  * Config File Manager
@@ -29,7 +30,19 @@ class ConfigFileManager {
       }
 
       const content = fs.readFileSync(this.configPath, 'utf8');
-      return JSON.parse(content);
+
+      // Security: Validate config file size (prevent DoS from maliciously large files)
+      const MAX_CONFIG_SIZE = 100 * 1024; // 100KB should be plenty for config
+      if (content.length > MAX_CONFIG_SIZE) {
+        console.error(`Warning: Config file ${this.configPath} is too large (${content.length} bytes, max ${MAX_CONFIG_SIZE})`);
+        return null;
+      }
+
+      // Security: Use safe JSON parser to prevent prototype pollution
+      return safeJsonParse.parse(content, null, {
+        protoAction: 'remove',
+        constructorAction: 'remove'
+      });
     } catch (error) {
       console.error(`Warning: Could not read ${this.configPath}:`, error.message);
       return null;
