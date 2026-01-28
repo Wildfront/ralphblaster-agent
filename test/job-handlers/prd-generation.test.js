@@ -91,7 +91,8 @@ describe('PrdGenerationHandler', () => {
 
     // Mock API client
     mockApiClient = {
-      sendStatusEvent: jest.fn().mockResolvedValue(undefined)
+      sendStatusEvent: jest.fn().mockResolvedValue(undefined),
+      flushProgressBuffer: jest.fn().mockResolvedValue(undefined)
     };
 
     // Create handler with mocked dependencies
@@ -263,30 +264,6 @@ describe('PrdGenerationHandler', () => {
       );
     });
 
-    test('creates log directory and writes log header', async () => {
-      const job = {
-        id: 123,
-        job_type: 'prd_generation',
-        task_title: 'Test PRD',
-        prompt: 'Generate PRD'
-      };
-
-      const startTime = new Date('2024-01-01T12:00:00Z').getTime();
-      mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
-        output: 'PRD output',
-        branchName: 'main',
-        duration: 5000
-      });
-
-      await handler.executeStandardPrd(job, jest.fn(), startTime);
-
-      expect(LogFileHelper.createJobLogStream).toHaveBeenCalledWith(
-        process.cwd(),
-        job,
-        startTime,
-        'PRD Generation'
-      );
-    });
 
     test('sends status event when PRD generation starts', async () => {
       const job = {
@@ -311,67 +288,6 @@ describe('PrdGenerationHandler', () => {
       );
     });
 
-    test('writes chunks to log file and calls onProgress with smart throttling', async () => {
-      const job = {
-        id: 1,
-        job_type: 'prd_generation',
-        task_title: 'Test PRD',
-        prompt: 'Generate PRD'
-      };
-
-      const mockOnProgress = jest.fn();
-      let capturedProgressCallback;
-
-      mockClaudeRunner.runClaudeDirectly.mockImplementation((cwd, prompt, job, onProgress) => {
-        capturedProgressCallback = onProgress;
-        return Promise.resolve({
-          output: 'PRD output',
-          branchName: 'main',
-          duration: 5000
-        });
-      });
-
-      const promise = handler.executeStandardPrd(job, mockOnProgress, Date.now());
-
-      // Wait for async setup
-      await new Promise(resolve => setImmediate(resolve));
-
-      // Simulate progress chunks with interesting keywords (triggers immediate update)
-      await capturedProgressCallback('Analyzing requirements...');
-      await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
-      await capturedProgressCallback('Generating sections...');
-
-      await promise;
-
-      // All chunks should be written to log file
-      expect(mockStream.write).toHaveBeenCalledWith('Analyzing requirements...');
-      expect(mockStream.write).toHaveBeenCalledWith('Generating sections...');
-
-      // onProgress should be called for interesting updates (throttled)
-      expect(mockOnProgress).toHaveBeenCalled();
-    });
-
-    test('writes completion footer to log file', async () => {
-      const job = {
-        id: 1,
-        job_type: 'prd_generation',
-        task_title: 'Test PRD',
-        prompt: 'Generate PRD'
-      };
-
-      mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
-        output: 'PRD output',
-        branchName: 'main',
-        duration: 5000
-      });
-
-      await handler.executeStandardPrd(job, jest.fn(), Date.now());
-
-      expect(LogFileHelper.writeCompletionFooterToStream).toHaveBeenCalledWith(
-        mockStream,
-        'PRD Generation'
-      );
-    });
 
     test('sends completion status event', async () => {
       const job = {
@@ -594,92 +510,6 @@ describe('PrdGenerationHandler', () => {
       );
     });
 
-    test('creates log directory and writes plan log header', async () => {
-      const job = {
-        id: 456,
-        prd_mode: 'plan',
-        task_title: 'Test Plan',
-        prompt: 'Generate plan'
-      };
-
-      const startTime = new Date('2024-01-01T14:30:00Z').getTime();
-      mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
-        output: 'Plan output',
-        branchName: 'main',
-        duration: 5000
-      });
-
-      await handler.executePlanGeneration(job, jest.fn(), startTime);
-
-      expect(LogFileHelper.createJobLogStream).toHaveBeenCalledWith(
-        process.cwd(),
-        job,
-        startTime,
-        'Plan Generation'
-      );
-    });
-
-    test('writes chunks to log file and calls onProgress with smart throttling', async () => {
-      const job = {
-        id: 1,
-        prd_mode: 'plan',
-        task_title: 'Test Plan',
-        prompt: 'Generate plan'
-      };
-
-      const mockOnProgress = jest.fn();
-      let capturedProgressCallback;
-
-      mockClaudeRunner.runClaudeDirectly.mockImplementation((cwd, prompt, job, onProgress) => {
-        capturedProgressCallback = onProgress;
-        return Promise.resolve({
-          output: 'Plan output',
-          branchName: 'main',
-          duration: 5000
-        });
-      });
-
-      const promise = handler.executePlanGeneration(job, mockOnProgress, Date.now());
-
-      // Wait for async setup
-      await new Promise(resolve => setImmediate(resolve));
-
-      // Simulate progress chunks with interesting keywords
-      await capturedProgressCallback('Analyzing project structure');
-      await new Promise(resolve => setTimeout(resolve, 100));
-      await capturedProgressCallback('Generating implementation plan');
-
-      await promise;
-
-      // All chunks written to log
-      expect(mockStream.write).toHaveBeenCalledWith('Analyzing project structure');
-      expect(mockStream.write).toHaveBeenCalledWith('Generating implementation plan');
-
-      // onProgress called for interesting updates (throttled)
-      expect(mockOnProgress).toHaveBeenCalled();
-    });
-
-    test('writes completion footer to log file', async () => {
-      const job = {
-        id: 1,
-        prd_mode: 'plan',
-        task_title: 'Test Plan',
-        prompt: 'Generate plan'
-      };
-
-      mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
-        output: 'Plan output',
-        branchName: 'main',
-        duration: 5000
-      });
-
-      await handler.executePlanGeneration(job, jest.fn(), Date.now());
-
-      expect(LogFileHelper.writeCompletionFooterToStream).toHaveBeenCalledWith(
-        mockStream,
-        'Plan Generation'
-      );
-    });
 
     test('returns correct result format', async () => {
       const job = {

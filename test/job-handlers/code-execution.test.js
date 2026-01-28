@@ -61,7 +61,8 @@ describe('CodeExecutionHandler', () => {
     // Mock API client
     mockApiClient = {
       sendStatusEvent: jest.fn(),
-      updateJobMetadata: jest.fn()
+      updateJobMetadata: jest.fn(),
+      flushProgressBuffer: jest.fn()
     };
 
     // Mock WorktreeManager instance
@@ -553,148 +554,6 @@ describe('CodeExecutionHandler', () => {
       });
     });
 
-    describe('log file persistence', () => {
-      test('saves execution output to log file', async () => {
-        const job = createMockJob();
-        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
-        fs.existsSync.mockReturnValue(true);
-        mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
-        mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
-          output: 'Claude output here',
-          branchName: 'feature/test'
-        });
-        mockGitHelper.logGitActivity.mockResolvedValue({
-          commitCount: 0,
-          lastCommitInfo: null,
-          changeStats: {},
-          wasPushed: false,
-          hasUncommittedChanges: false
-        });
-
-        await handler.executeCodeImplementation(job, mockOnProgress, startTime);
-
-        expect(fsPromises.mkdir).toHaveBeenCalledWith(
-          '/test/project/.rb-logs',
-          { recursive: true }
-        );
-        expect(fsPromises.writeFile).toHaveBeenCalledWith(
-          '/test/project/.rb-logs/job-1.log',
-          expect.stringContaining('Claude output here')
-        );
-        expect(fsPromises.writeFile).toHaveBeenCalledWith(
-          '/test/project/.rb-logs/job-1.log',
-          expect.stringContaining('Job #1 - Test Task')
-        );
-      });
-
-      test('saves stderr to separate error log if present', async () => {
-        const job = createMockJob();
-        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
-        fs.existsSync.mockReturnValue(true);
-        mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
-        mockClaudeRunner.capturedStderr = 'Some error output';
-        mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
-          output: 'test output',
-          branchName: 'feature/test'
-        });
-        mockGitHelper.logGitActivity.mockResolvedValue({
-          commitCount: 0,
-          lastCommitInfo: null,
-          changeStats: {},
-          wasPushed: false,
-          hasUncommittedChanges: false
-        });
-
-        await handler.executeCodeImplementation(job, mockOnProgress, startTime);
-
-        expect(fsPromises.writeFile).toHaveBeenCalledWith(
-          '/test/project/.rb-logs/job-1-stderr.log',
-          'Some error output'
-        );
-      });
-
-      test('does not save stderr log when empty', async () => {
-        const job = createMockJob();
-        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
-        fs.existsSync.mockReturnValue(true);
-        mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
-        mockClaudeRunner.capturedStderr = '';
-        mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
-          output: 'test output',
-          branchName: 'feature/test'
-        });
-        mockGitHelper.logGitActivity.mockResolvedValue({
-          commitCount: 0,
-          lastCommitInfo: null,
-          changeStats: {},
-          wasPushed: false,
-          hasUncommittedChanges: false
-        });
-
-        await handler.executeCodeImplementation(job, mockOnProgress, startTime);
-
-        const writeFileCalls = fsPromises.writeFile.mock.calls;
-        const stderrLogCall = writeFileCalls.find(call => call[0].includes('stderr.log'));
-        expect(stderrLogCall).toBeUndefined();
-      });
-
-      test('saves error details to log file on failure', async () => {
-        const job = createMockJob();
-        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
-        fs.existsSync.mockReturnValue(true);
-        mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
-
-        const error = new Error('Execution failed');
-        error.category = 'execution_error';
-        error.technicalDetails = 'Stack trace here';
-        error.partialOutput = 'Partial output here';
-
-        mockClaudeRunner.capturedStderr = 'Error stderr';
-        mockClaudeRunner.runClaudeDirectly.mockRejectedValue(error);
-
-        await expect(handler.executeCodeImplementation(job, mockOnProgress, startTime))
-          .rejects.toThrow('Execution failed');
-
-        expect(fsPromises.writeFile).toHaveBeenCalledWith(
-          '/test/project/.rb-logs/job-1-error.log',
-          expect.stringContaining('Job #1 - FAILED')
-        );
-        expect(fsPromises.writeFile).toHaveBeenCalledWith(
-          '/test/project/.rb-logs/job-1-error.log',
-          expect.stringContaining('Execution failed')
-        );
-        expect(fsPromises.writeFile).toHaveBeenCalledWith(
-          '/test/project/.rb-logs/job-1-error.log',
-          expect.stringContaining('execution_error')
-        );
-      });
-
-      test('handles log save failures gracefully', async () => {
-        const job = createMockJob();
-        mockPathHelper.validateProjectPathStrict.mockReturnValue('/test/project');
-        fs.existsSync.mockReturnValue(true);
-        mockWorktreeManager.createWorktree.mockResolvedValue('/test/worktree');
-        mockClaudeRunner.runClaudeDirectly.mockResolvedValue({
-          output: 'test output',
-          branchName: 'feature/test'
-        });
-        mockGitHelper.logGitActivity.mockResolvedValue({
-          commitCount: 0,
-          lastCommitInfo: null,
-          changeStats: {},
-          wasPushed: false,
-          hasUncommittedChanges: false
-        });
-
-        // Make log file writing fail
-        fsPromises.writeFile.mockRejectedValue(new Error('Disk full'));
-
-        // Should still succeed even if logging fails
-        const result = await handler.executeCodeImplementation(job, mockOnProgress, startTime);
-        expect(result).toBeDefined();
-        expect(result.summary).toBe('Completed task: Test Task');
-      });
-    });
 
     describe('return value', () => {
       test('returns complete result object', async () => {
