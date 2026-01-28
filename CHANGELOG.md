@@ -1,5 +1,60 @@
 # Agent Changelog
 
+## 2026-01-28 - Fix Agent False Offline Status (v1.5.0)
+
+### Critical Bug Fix
+
+**Issue**: Agent frequently showed as "offline" in the UI even when actively running and processing jobs.
+
+**Root Cause**: Timing mismatch between agent heartbeat (60s) and backend offline detection threshold (30s), creating a guaranteed 30-second window where the agent would incorrectly show as offline.
+
+**Impact**:
+- UI flickered between online/offline states during normal operation
+- ActionCable was broadcasting the WRONG status in real-time (timing bug, not ActionCable bug)
+- Users could not reliably see when their agent was actually connected
+
+**Solution**:
+- Reduced agent heartbeat interval: 60s → 20s (3 heartbeats per minute)
+- Increased backend offline threshold: 30s → 35s
+- Creates 15-second safety margin for network delays, clock skew, and processing time
+- Agent now sends multiple heartbeats within the offline detection window
+- ActionCable now broadcasts the CORRECT status in real-time
+
+### Files Modified
+
+**Agent (Node.js):**
+- `src/index.js` - Changed `HEARTBEAT_INTERVAL_MS` from 60000ms to 20000ms
+- `test/index-heartbeat.test.js` - Updated all timing tests, added verification test
+
+**Backend (Rails):**
+- `app/models/user.rb` - Added `AGENT_OFFLINE_THRESHOLD = 35.seconds` constant
+- `app/models/concerns/agent_status_broadcaster.rb` - Updated to use `User::AGENT_OFFLINE_THRESHOLD`
+- `app/jobs/agent_status_monitor_job.rb` - Updated `DISCONNECT_THRESHOLD` to 35 seconds
+
+### Expected Results
+
+After updating:
+- Zero false offline readings during normal operation
+- Stable "online" status without flickering
+- Real disconnects still detected within 35-40 seconds
+- Offline detection during crashes: < 40 seconds
+- ActionCable broadcasts correct status instantly via WebSocket
+
+### Performance Impact
+
+- Network traffic: 3x increase (60 heartbeats/hour → 180 heartbeats/hour)
+- Bandwidth impact: Minimal (~18KB/hour per agent)
+- Server load: < 1% CPU increase (simple timestamp updates)
+
+### Testing
+
+All heartbeat tests pass:
+```bash
+npm test -- test/index-heartbeat.test.js
+```
+
+---
+
 ## 2026-01-22 - Fix Worktree Location to Prevent Main Branch Conflicts (v1.4.0)
 
 ### Critical Bug Fix

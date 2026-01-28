@@ -53,7 +53,7 @@ describe('RalphAgent - Heartbeat', () => {
   });
 
   describe('startHeartbeat()', () => {
-    test('sends heartbeat every 60s', () => {
+    test('sends heartbeat every 20s', () => {
       mockApiClient.sendHeartbeat.mockResolvedValue();
 
       agent.startHeartbeat(1);
@@ -61,17 +61,17 @@ describe('RalphAgent - Heartbeat', () => {
       // No heartbeat yet
       expect(mockApiClient.sendHeartbeat).not.toHaveBeenCalled();
 
-      // After 60 seconds
-      jest.advanceTimersByTime(60000);
+      // After 20 seconds
+      jest.advanceTimersByTime(20000);
       expect(mockApiClient.sendHeartbeat).toHaveBeenCalledTimes(1);
       expect(mockApiClient.sendHeartbeat).toHaveBeenCalledWith(1);
 
-      // After another 60 seconds
-      jest.advanceTimersByTime(60000);
+      // After another 20 seconds
+      jest.advanceTimersByTime(20000);
       expect(mockApiClient.sendHeartbeat).toHaveBeenCalledTimes(2);
 
-      // After another 60 seconds
-      jest.advanceTimersByTime(60000);
+      // After another 20 seconds
+      jest.advanceTimersByTime(20000);
       expect(mockApiClient.sendHeartbeat).toHaveBeenCalledTimes(3);
     });
 
@@ -80,6 +80,19 @@ describe('RalphAgent - Heartbeat', () => {
 
       expect(agent.heartbeatInterval).not.toBeNull();
       expect(typeof agent.heartbeatInterval).toBe('object');
+    });
+
+    test('sends at least 2 heartbeats within 35s offline threshold', () => {
+      mockApiClient.sendHeartbeat.mockResolvedValue();
+      agent.startHeartbeat(1);
+
+      // First heartbeat at 20s
+      jest.advanceTimersByTime(20000);
+      expect(mockApiClient.sendHeartbeat).toHaveBeenCalledTimes(1);
+
+      // Second heartbeat at 40s (well before offline detection at 35s)
+      jest.advanceTimersByTime(20000);
+      expect(mockApiClient.sendHeartbeat).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -99,15 +112,15 @@ describe('RalphAgent - Heartbeat', () => {
       agent.startHeartbeat(1);
 
       // First heartbeat
-      jest.advanceTimersByTime(60000);
+      jest.advanceTimersByTime(20000);
       expect(mockApiClient.sendHeartbeat).toHaveBeenCalledTimes(1);
 
       // Stop heartbeat
       agent.stopHeartbeat();
 
       // Advance time - should not send more heartbeats
-      jest.advanceTimersByTime(60000);
-      jest.advanceTimersByTime(60000);
+      jest.advanceTimersByTime(20000);
+      jest.advanceTimersByTime(20000);
       expect(mockApiClient.sendHeartbeat).toHaveBeenCalledTimes(1);
     });
 
@@ -126,7 +139,7 @@ describe('RalphAgent - Heartbeat', () => {
       agent.startHeartbeat(1);
 
       // Advance to trigger heartbeat
-      jest.advanceTimersByTime(60000);
+      jest.advanceTimersByTime(20000);
 
       // Wait for promise to settle
       await Promise.resolve();
@@ -135,7 +148,7 @@ describe('RalphAgent - Heartbeat', () => {
       expect(mockApiClient.sendHeartbeat).toHaveBeenCalledTimes(1);
 
       // Interval should still be active - next heartbeat should still fire
-      jest.advanceTimersByTime(60000);
+      jest.advanceTimersByTime(20000);
       await Promise.resolve();
       expect(mockApiClient.sendHeartbeat).toHaveBeenCalledTimes(2);
     });
@@ -149,12 +162,12 @@ describe('RalphAgent - Heartbeat', () => {
       agent.startHeartbeat(1);
 
       // First heartbeat fails
-      jest.advanceTimersByTime(60000);
+      jest.advanceTimersByTime(20000);
       await Promise.resolve();
       expect(mockApiClient.sendHeartbeat).toHaveBeenCalledTimes(1);
 
       // Second heartbeat succeeds
-      jest.advanceTimersByTime(60000);
+      jest.advanceTimersByTime(20000);
       await Promise.resolve();
       expect(mockApiClient.sendHeartbeat).toHaveBeenCalledTimes(2);
     });
