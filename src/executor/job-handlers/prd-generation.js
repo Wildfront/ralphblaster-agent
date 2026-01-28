@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('../../logger');
-const LogFileHelper = require('../../utils/log-file-helper');
+const ProgressParser = require('../../utils/progress-parser');
 
 /**
  * PrdGenerationHandler - Handles PRD and Plan generation jobs
@@ -50,7 +50,6 @@ class PrdGenerationHandler {
     this.promptValidator.validatePrompt(prompt);
     logger.info('Prompt validation passed');
 
-    let logStream = null;
     try {
       // Determine and sanitize working directory
       logger.info('Determining working directory...');
@@ -59,43 +58,81 @@ class PrdGenerationHandler {
         process.cwd()
       );
 
-      // Setup log file for streaming PRD generation output
-      logger.info('Setting up log file...');
-      const { logFile, logStream: stream } = await LogFileHelper.createJobLogStream(
-        workingDir,
-        job,
-        startTime,
-        'PRD Generation'
-      );
-      logStream = stream;
-      logger.info(`PRD generation log created at: ${logFile}`);
-
       // Send status event to UI
       if (this.apiClient) {
         await this.apiClient.sendStatusEvent(job.id, 'prd_generation_started', 'Starting PRD generation with Claude...');
       }
 
-      // Create a wrapper onProgress that also writes to log file
-      const logAndProgress = LogFileHelper.createLogAndProgressCallbackStream(
-        logStream,
-        onProgress,
-        logger,
-        { progressMessage: 'PRD generation progress' }
-      );
+      // Create ProgressParser for structured milestone tracking
+      const progressParser = new ProgressParser(this.apiClient, job.id, 'prd_generation');
+
+      // Create a progress callback that:
+      // 1. Sends progress updates to API (which broadcasts to UI in real-time)
+      // 2. Uses ProgressParser for structured updates
+      // 3. Maintains backward compatibility with onProgress callback
+      let chunkBuffer = '';
+      let lastOnProgressCall = 0;
+
+      const smartProgress = async (chunk) => {
+        // Send progress to API (best-effort, don't fail on errors)
+        if (this.apiClient) {
+          try {
+            await this.apiClient.sendProgress(job.id, chunk);
+          } catch (err) {
+            logger.debug(`Failed to send progress to API: ${err.message}`);
+          }
+        }
+
+        // Process through ProgressParser for structured milestone updates
+        await progressParser.processChunk(chunk);
+
+        // Backward compatibility for tests: call onProgress for interesting chunks
+        if (onProgress) {
+          chunkBuffer += chunk;
+          if (chunkBuffer.length > 5000) {
+            chunkBuffer = chunkBuffer.slice(-5000);
+          }
+
+          const isInteresting = /reading|analyzing|generating|writing|creating|completing|understanding|exploring/i.test(chunk);
+          const now = Date.now();
+
+          // Call onProgress if we have a milestone message or for interesting chunks
+          if ((isInteresting && now - lastOnProgressCall >= 2000) || (now - lastOnProgressCall >= 5000)) {
+            const message = progressParser.getLastMilestoneMessage();
+            if (message) {
+              await onProgress(message);
+              lastOnProgressCall = now;
+            } else if (isInteresting) {
+              // Fallback: extract a simple message from the chunk
+              const lines = chunkBuffer.split('\n').filter(l => l.trim().length > 0);
+              if (lines.length > 0) {
+                const lastLine = lines[lines.length - 1].trim().replace(/\x1b\[[0-9;]*m/g, '').slice(0, 100);
+                if (lastLine) {
+                  await onProgress(lastLine);
+                  lastOnProgressCall = now;
+                }
+              }
+            }
+          }
+        }
+      };
 
       // Use Claude Code with server-provided template (no longer using /prd skill)
       logger.info('Invoking Claude Code for PRD generation...');
       logger.info('This may take several minutes depending on complexity');
-      const output = await this.claudeRunner.runClaude(prompt, workingDir, logAndProgress);
+      const result = await this.claudeRunner.runClaudeDirectly(workingDir, prompt, job, smartProgress);
+      const output = result.output;
       logger.info('Claude Code execution completed', {
-        outputLength: output.length,
-        totalChunks: logAndProgress.totalChunks
+        outputLength: output.length
       });
 
-      // Write completion footer to log
-      logger.info('Writing completion footer to log file...');
-      LogFileHelper.writeCompletionFooterToStream(logStream, 'PRD Generation');
-      logger.info(`PRD generation log completed: ${logFile}`);
+      // Mark progress as complete
+      await progressParser.markComplete();
+
+      // Flush any remaining progress updates
+      if (this.apiClient) {
+        await this.apiClient.flushProgressBuffer(job.id);
+      }
 
       // Send completion status event
       if (this.apiClient) {
@@ -131,11 +168,6 @@ class PrdGenerationHandler {
       }
 
       throw error;
-    } finally {
-      // Ensure log stream is properly closed
-      if (logStream) {
-        logStream.end();
-      }
     }
   }
 
@@ -150,7 +182,6 @@ class PrdGenerationHandler {
     // Use the server-provided prompt (already formatted with template system)
     const prompt = job.prompt;
 
-    let logStream = null;
     try {
       // Determine working directory
       const workingDir = this.pathHelper.validateProjectPathWithFallback(
@@ -158,30 +189,66 @@ class PrdGenerationHandler {
         process.cwd()
       );
 
-      // Setup log file for streaming plan generation output
-      const { logFile, logStream: stream } = await LogFileHelper.createJobLogStream(
-        workingDir,
-        job,
-        startTime,
-        'Plan Generation'
-      );
-      logStream = stream;
-      logger.info(`Plan generation log created at: ${logFile}`);
+      // Create ProgressParser for structured milestone tracking
+      const progressParser = new ProgressParser(this.apiClient, job.id, 'prd_generation');
 
-      // Create a wrapper onProgress that also writes to log file
-      const logAndProgress = LogFileHelper.createLogAndProgressCallbackStream(
-        logStream,
-        onProgress,
-        logger,
-        { progressMessage: 'Plan generation progress' }
-      );
+      // Create a progress callback that uses ProgressParser
+      let chunkBuffer = '';
+      let lastOnProgressCall = 0;
+
+      const smartProgress = async (chunk) => {
+        // Send progress to API (best-effort, don't fail on errors)
+        if (this.apiClient) {
+          try {
+            await this.apiClient.sendProgress(job.id, chunk);
+          } catch (err) {
+            logger.debug(`Failed to send progress to API: ${err.message}`);
+          }
+        }
+
+        // Process through ProgressParser for structured milestone updates
+        await progressParser.processChunk(chunk);
+
+        // Backward compatibility for tests
+        if (onProgress) {
+          chunkBuffer += chunk;
+          if (chunkBuffer.length > 5000) {
+            chunkBuffer = chunkBuffer.slice(-5000);
+          }
+
+          const isInteresting = /reading|analyzing|generating|writing|creating|completing|understanding|exploring/i.test(chunk);
+          const now = Date.now();
+
+          if ((isInteresting && now - lastOnProgressCall >= 2000) || (now - lastOnProgressCall >= 5000)) {
+            const message = progressParser.getLastMilestoneMessage();
+            if (message) {
+              await onProgress(message);
+              lastOnProgressCall = now;
+            } else if (isInteresting) {
+              const lines = chunkBuffer.split('\n').filter(l => l.trim().length > 0);
+              if (lines.length > 0) {
+                const lastLine = lines[lines.length - 1].trim().replace(/\x1b\[[0-9;]*m/g, '').slice(0, 100);
+                if (lastLine) {
+                  await onProgress(lastLine);
+                  lastOnProgressCall = now;
+                }
+              }
+            }
+          }
+        }
+      };
 
       // Use Claude Code to trigger planning mode
-      const output = await this.claudeRunner.runClaude(prompt, workingDir, logAndProgress);
+      const result = await this.claudeRunner.runClaudeDirectly(workingDir, prompt, job, smartProgress);
+      const output = result.output;
 
-      // Write completion footer to log
-      LogFileHelper.writeCompletionFooterToStream(logStream, 'Plan Generation');
-      logger.info(`Plan generation log completed: ${logFile}`);
+      // Mark progress as complete
+      await progressParser.markComplete();
+
+      // Flush any remaining progress updates
+      if (this.apiClient) {
+        await this.apiClient.flushProgressBuffer(job.id);
+      }
 
       const executionTimeMs = Date.now() - startTime;
 
@@ -193,13 +260,9 @@ class PrdGenerationHandler {
     } catch (error) {
       logger.error(`Plan generation failed for job #${job.id}: ${error.message}`);
       throw error;
-    } finally {
-      // Ensure log stream is properly closed
-      if (logStream) {
-        logStream.end();
-      }
     }
   }
+
 }
 
 module.exports = PrdGenerationHandler;
