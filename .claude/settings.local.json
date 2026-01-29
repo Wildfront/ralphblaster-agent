@@ -74,7 +74,11 @@
       "Bash(else echo \"Backup not found, calculating from git\")",
       "Bash(npm ls:*)",
       "Bash(node:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(for file in src/**/*.js)",
+      "Bash(do node -c \"$file\")",
+      "Bash(claude --output-format stream-json --permission-mode acceptEdits)",
+      "Bash(claude --output-format stream-json --permission-mode acceptEdits --verbose)"
     ]
   }
 }
