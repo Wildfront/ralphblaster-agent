@@ -68,46 +68,53 @@ class ClaudeRunner {
 
     switch (event.type) {
       case 'content_block_delta':
+        // Only show Claude's actual text output, not every tiny delta
         return event.delta?.text || null;
+
       case 'tool_use':
-        return `\n[Tool: ${event.name}]\n`;
       case 'tool_result':
-        return `\n[Tool Result: ${event.tool_use_id || 'unknown'}]\n`;
+        // Don't show generic tool messages - we send better structured events via sendToolStatusEvent
+        return null;
+
       case 'thinking':
-        return event.content ? `\n[Thinking: ${event.content.slice(0, 100)}...]\n` : null;
+        // Skip thinking blocks - we send these via sendToolStatusEvent as progress_update
+        return null;
+
       case 'error':
-        return `\n[Error: ${event.error?.message || 'Unknown error'}]\n`;
+        return `\n❌ Error: ${event.error?.message || 'Unknown error'}\n`;
+
       case 'assistant': {
-        // Extract text and tool_use from assistant messages
+        // Only extract Claude's actual text responses, not tool invocations
         const content = event.message?.content || [];
-        const parts = [];
+        const textParts = [];
         for (const block of content) {
           if (block.type === 'text' && block.text) {
-            parts.push(block.text);
-          } else if (block.type === 'tool_use') {
-            parts.push(`\n[Tool: ${block.name}]\n`);
+            // Only include substantial text (not just whitespace)
+            const trimmed = block.text.trim();
+            if (trimmed.length > 0) {
+              textParts.push(block.text);
+            }
           }
+          // Skip tool_use blocks - we handle those via sendToolStatusEvent
         }
-        return parts.length > 0 ? parts.join('') : null;
+        return textParts.length > 0 ? textParts.join('') : null;
       }
-      case 'user': {
-        // Extract tool results from user messages
-        const content = event.message?.content || [];
-        for (const block of content) {
-          if (block.type === 'tool_result') {
-            // Just show a brief indicator, not the full result
-            return `[✓ Tool completed]\n`;
-          }
-        }
+
+      case 'user':
+        // Skip user messages (tool results) - not useful in progress stream
         return null;
-      }
+
       case 'text':
         return event.text || null;
+
       case 'result':
-        return event.result ? `\n[Result received]\n` : null;
+        // Skip result events - not useful for live progress
+        return null;
+
       case 'system':
         // Skip system events (init, hooks) - not useful for display
         return null;
+
       default:
         if (this.debugStream) {
           logger.debug(`Unhandled stream event type: ${event.type}`);
