@@ -303,14 +303,22 @@ class RalphAgent {
     });
 
     process.on('uncaughtException', (error) => {
-      logger.error('Uncaught exception: ' + (error?.message || error));
-      console.error(error); // Also log full error with stack trace
+      logger.error('╔══════════════════════════════════════════════════════════');
+      logger.error('║ UNCAUGHT EXCEPTION - Agent will shutdown');
+      logger.error('║ Message: ' + (error?.message || error));
+      logger.error('║ Stack: ' + (error?.stack || 'no stack'));
+      logger.error('╚══════════════════════════════════════════════════════════');
+      console.error('UNCAUGHT EXCEPTION:', error);
       this.stop();
     });
 
     process.on('unhandledRejection', (reason, promise) => {
-      logger.error('Unhandled rejection: ' + (reason?.message || reason));
-      console.error(reason); // Also log full reason with stack trace
+      logger.error('╔══════════════════════════════════════════════════════════');
+      logger.error('║ UNHANDLED REJECTION - Agent will shutdown');
+      logger.error('║ Reason: ' + (reason?.message || reason));
+      logger.error('║ Stack: ' + (reason?.stack || 'no stack'));
+      logger.error('╚══════════════════════════════════════════════════════════');
+      console.error('UNHANDLED REJECTION:', reason);
       this.stop();
     });
   }
