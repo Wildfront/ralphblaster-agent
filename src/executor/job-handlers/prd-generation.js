@@ -58,6 +58,9 @@ class PrdGenerationHandler {
         process.cwd()
       );
 
+      // Clear any existing log file for this job to avoid showing old logs
+      await this.clearExistingLogFile(workingDir, job.id);
+
       // Send status event to UI
       if (this.apiClient) {
         await this.apiClient.sendStatusEvent(job.id, 'prd_generation_started', 'Starting PRD generation with Claude...');
@@ -69,10 +72,7 @@ class PrdGenerationHandler {
       // Create a progress callback that:
       // 1. Sends progress updates to API (which broadcasts to UI in real-time)
       // 2. Uses ProgressParser for structured updates
-      // 3. Maintains backward compatibility with onProgress callback
-      let chunkBuffer = '';
-      let lastOnProgressCall = 0;
-
+      // 3. Forwards all chunks to terminal (let index.js handle throttling)
       const smartProgress = async (chunk) => {
         // Send progress to API (best-effort, don't fail on errors)
         if (this.apiClient) {
@@ -86,34 +86,9 @@ class PrdGenerationHandler {
         // Process through ProgressParser for structured milestone updates
         await progressParser.processChunk(chunk);
 
-        // Backward compatibility for tests: call onProgress for interesting chunks
+        // Forward all chunks to terminal (let index.js handle throttling)
         if (onProgress) {
-          chunkBuffer += chunk;
-          if (chunkBuffer.length > 5000) {
-            chunkBuffer = chunkBuffer.slice(-5000);
-          }
-
-          const isInteresting = /reading|analyzing|generating|writing|creating|completing|understanding|exploring/i.test(chunk);
-          const now = Date.now();
-
-          // Call onProgress if we have a milestone message or for interesting chunks
-          if ((isInteresting && now - lastOnProgressCall >= 2000) || (now - lastOnProgressCall >= 5000)) {
-            const message = progressParser.getLastMilestoneMessage();
-            if (message) {
-              await onProgress(message);
-              lastOnProgressCall = now;
-            } else if (isInteresting) {
-              // Fallback: extract a simple message from the chunk
-              const lines = chunkBuffer.split('\n').filter(l => l.trim().length > 0);
-              if (lines.length > 0) {
-                const lastLine = lines[lines.length - 1].trim().replace(/\x1b\[[0-9;]*m/g, '').slice(0, 100);
-                if (lastLine) {
-                  await onProgress(lastLine);
-                  lastOnProgressCall = now;
-                }
-              }
-            }
-          }
+          await onProgress(chunk);
         }
       };
 
@@ -189,13 +164,16 @@ class PrdGenerationHandler {
         process.cwd()
       );
 
+      // Clear any existing log file for this job to avoid showing old logs
+      await this.clearExistingLogFile(workingDir, job.id);
+
       // Create ProgressParser for structured milestone tracking
       const progressParser = new ProgressParser(this.apiClient, job.id, 'prd_generation');
 
-      // Create a progress callback that uses ProgressParser
-      let chunkBuffer = '';
-      let lastOnProgressCall = 0;
-
+      // Create a progress callback that:
+      // 1. Sends progress updates to API (which broadcasts to UI in real-time)
+      // 2. Uses ProgressParser for structured updates
+      // 3. Forwards all chunks to terminal (let index.js handle throttling)
       const smartProgress = async (chunk) => {
         // Send progress to API (best-effort, don't fail on errors)
         if (this.apiClient) {
@@ -209,32 +187,9 @@ class PrdGenerationHandler {
         // Process through ProgressParser for structured milestone updates
         await progressParser.processChunk(chunk);
 
-        // Backward compatibility for tests
+        // Forward all chunks to terminal (let index.js handle throttling)
         if (onProgress) {
-          chunkBuffer += chunk;
-          if (chunkBuffer.length > 5000) {
-            chunkBuffer = chunkBuffer.slice(-5000);
-          }
-
-          const isInteresting = /reading|analyzing|generating|writing|creating|completing|understanding|exploring/i.test(chunk);
-          const now = Date.now();
-
-          if ((isInteresting && now - lastOnProgressCall >= 2000) || (now - lastOnProgressCall >= 5000)) {
-            const message = progressParser.getLastMilestoneMessage();
-            if (message) {
-              await onProgress(message);
-              lastOnProgressCall = now;
-            } else if (isInteresting) {
-              const lines = chunkBuffer.split('\n').filter(l => l.trim().length > 0);
-              if (lines.length > 0) {
-                const lastLine = lines[lines.length - 1].trim().replace(/\x1b\[[0-9;]*m/g, '').slice(0, 100);
-                if (lastLine) {
-                  await onProgress(lastLine);
-                  lastOnProgressCall = now;
-                }
-              }
-            }
-          }
+          await onProgress(chunk);
         }
       };
 
@@ -260,6 +215,30 @@ class PrdGenerationHandler {
     } catch (error) {
       logger.error(`Plan generation failed for job #${job.id}: ${error.message}`);
       throw error;
+    }
+  }
+
+  /**
+   * Clear existing log file for a job to prevent old logs from showing
+   * @param {string} workingDir - Working directory
+   * @param {number} jobId - Job ID
+   * @returns {Promise<void>}
+   * @private
+   */
+  async clearExistingLogFile(workingDir, jobId) {
+    try {
+      const logDir = path.join(workingDir, '.rb-logs');
+      const logFile = path.join(logDir, `job-${jobId}.log`);
+
+      // Check if log file exists and delete it
+      if (fs.existsSync(logFile)) {
+        logger.debug(`Clearing existing log file: ${logFile}`);
+        await fs.promises.unlink(logFile);
+        logger.debug('Previous log file cleared successfully');
+      }
+    } catch (error) {
+      // Don't fail the job if we can't clear the log file
+      logger.warn(`Failed to clear existing log file: ${error.message}`);
     }
   }
 
