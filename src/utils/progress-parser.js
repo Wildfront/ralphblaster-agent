@@ -13,7 +13,8 @@ class ProgressParser {
     this.jobType = jobType; // 'prd_generation', 'code_execution', etc.
 
     // Track what we've already reported to avoid duplicates
-    this.reportedMilestones = new Set();
+    // Using Map to store both boolean flags and timestamps
+    this.reportedMilestones = new Map();
 
     // Buffer to accumulate chunks for pattern matching
     this.buffer = '';
@@ -136,7 +137,7 @@ class ProgressParser {
     for (const milestone of milestones) {
       if (milestone.pattern.test(this.buffer) && !this.reportedMilestones.has(milestone.event)) {
         await this.sendStatusUpdate(milestone.event, milestone.message);
-        this.reportedMilestones.add(milestone.event);
+        this.reportedMilestones.set(milestone.event, true);
         logger.debug(`Progress milestone: ${milestone.event}`);
       }
     }
@@ -233,7 +234,7 @@ class ProgressParser {
    * Get total unique milestones reported
    */
   getMilestonesReported() {
-    return Array.from(this.reportedMilestones).filter(m => !m.endsWith('_last'));
+    return Array.from(this.reportedMilestones.keys()).filter(m => !m.endsWith('_last'));
   }
 
   /**
