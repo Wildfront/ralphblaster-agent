@@ -98,7 +98,9 @@ describe('Executor - Plan Generation', () => {
 
       // Add minimal delay to ensure executionTimeMs > 0
       setTimeout(() => {
-        mockProcess.stdout.emit('data', Buffer.from('Plan content here'));
+        // Emit stream-json formatted event with content
+        const streamEvent = JSON.stringify({ type: 'content_block_delta', delta: { text: 'Plan content here' } });
+        mockProcess.stdout.emit('data', Buffer.from(streamEvent + '\n'));
         mockProcess.emit('close', 0);
       }, 1);
 
@@ -274,7 +276,7 @@ describe('Executor - Plan Generation', () => {
         // Should use process.cwd()
         expect(spawn).toHaveBeenCalledWith(
           'claude',
-          ['--print', '--permission-mode', 'acceptEdits'],
+          ['--output-format', 'stream-json', '--permission-mode', 'acceptEdits', '--verbose'],
           expect.objectContaining({
             cwd: process.cwd()
           })
@@ -314,7 +316,7 @@ describe('Executor - Plan Generation', () => {
       setTimeout(() => {
         expect(spawn).toHaveBeenCalledWith(
           'claude',
-          ['--print', '--permission-mode', 'acceptEdits'],
+          ['--output-format', 'stream-json', '--permission-mode', 'acceptEdits', '--verbose'],
           expect.objectContaining({
             cwd: process.cwd()
           })
@@ -325,6 +327,52 @@ describe('Executor - Plan Generation', () => {
       }, 1);
 
       await planPromise;
+    });
+
+    test('forwards all Claude output to onProgress callback without filtering', async () => {
+      const job = {
+        id: 8,
+        prd_mode: 'plan',
+        prompt: 'Test',
+        project: { system_path: '/test' }
+      };
+
+      const mockProcess = new EventEmitter();
+      mockProcess.stdin = {
+        write: jest.fn(),
+        end: jest.fn()
+      };
+      mockProcess.stdout = new EventEmitter();
+      mockProcess.stderr = new EventEmitter();
+      mockProcess.killed = false;
+
+      spawn.mockReturnValue(mockProcess);
+
+      const onProgress = jest.fn();
+      const planPromise = executor.executePrdGeneration(job, onProgress, Date.now());
+
+      // Wait for async operations to complete before emitting events
+      setTimeout(() => {
+        // Emit various chunks - some that match keywords, some that don't
+        mockProcess.stderr.emit('data', Buffer.from('Reading file.js\n'));
+        mockProcess.stderr.emit('data', Buffer.from('Some other output\n'));
+        mockProcess.stderr.emit('data', Buffer.from('Random debug info\n'));
+        mockProcess.stderr.emit('data', Buffer.from('Analyzing code...\n'));
+
+        // Emit final output and close
+        mockProcess.stdout.emit('data', Buffer.from('Plan content'));
+        mockProcess.emit('close', 0);
+      }, 10);
+
+      await planPromise;
+
+      // Verify ALL chunks were forwarded (not filtered)
+      // Note: The onProgress callback is wrapped by LogFileHelper, so we check
+      // that it was called with all the chunks
+      expect(onProgress).toHaveBeenCalledWith('Reading file.js\n');
+      expect(onProgress).toHaveBeenCalledWith('Some other output\n');
+      expect(onProgress).toHaveBeenCalledWith('Random debug info\n');
+      expect(onProgress).toHaveBeenCalledWith('Analyzing code...\n');
     });
   });
 });
