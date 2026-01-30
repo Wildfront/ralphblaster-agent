@@ -262,16 +262,15 @@ class RalphAgent {
         const minutes = Math.floor(elapsed / 60000);
         const seconds = Math.floor((elapsed % 60000) / 1000);
 
-        // Send heartbeat to update claimed_at
-        await this.apiClient.sendHeartbeat(jobId);
+        // Phase 1.2: Send combined heartbeat + status event in single call (reduces API calls by 50%)
+        await this.apiClient.sendHeartbeat(jobId, {
+          event_type: 'heartbeat',
+          message: `Still working... (${minutes}m ${seconds}s elapsed)`,
+          metadata: { elapsed_ms: elapsed }
+        });
 
-        // Send status event with elapsed time
-        await this.apiClient.sendStatusEvent(
-          jobId,
-          'heartbeat',
-          `Still working... (${minutes}m ${seconds}s elapsed)`,
-          { elapsed_ms: elapsed }
-        );
+        // REMOVED: Separate sendStatusEvent() call
+        // await this.apiClient.sendStatusEvent(jobId, 'heartbeat', ...);
       } catch (err) {
         logger.warn('Heartbeat failed: ' + err.message);
       }

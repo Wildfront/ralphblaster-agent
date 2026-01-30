@@ -356,18 +356,15 @@ class ApiClient {
 
       const payload = {
         status: 'completed',
-        output: this.validateOutput(result.output || ''),
+        // Phase 2.2: REMOVED output (already streamed via progress_batch)
+        // Phase 2.2: REMOVED prd_content (already streamed via progress_batch)
         execution_time_ms: result.executionTimeMs
       };
 
       // Add job-type specific fields with validation
-      if (result.prdContent) {
-        logger.debug('Adding PRD content to payload', { length: result.prdContent.length });
-        payload.prd_content = this.validateOutput(result.prdContent);
-      }
       if (result.summary) {
         logger.debug('Adding summary to payload', { length: result.summary.length });
-        payload.summary = this.validateOutput(result.summary, 10000); // 10KB max for summary
+        payload.summary = this.validateOutput(result.summary, 10000); // 10KB max
       }
       if (result.branchName) {
         // Validate branch name format following git branch naming rules:
@@ -482,15 +479,24 @@ class ApiClient {
 
   /**
    * Send heartbeat to keep job alive (updates claimed_at)
+   * Optionally includes status event data to reduce API calls
    * @param {number} jobId - Job ID
+   * @param {Object} statusEvent - Optional {event_type, message, metadata}
    */
-  async sendHeartbeat(jobId) {
+  async sendHeartbeat(jobId, statusEvent = null) {
     try {
-      await this.requestWithFallback('patch', `/jobs/${jobId}`, {
+      const payload = {
         status: 'running',
         heartbeat: true  // Distinguish from initial markJobRunning call
-      });
-      logger.debug(`Heartbeat sent for job #${jobId}`);
+      };
+
+      // Phase 1.2: Include status event if provided (reduces API calls by 50%)
+      if (statusEvent) {
+        payload.status_event = statusEvent;
+      }
+
+      await this.requestWithFallback('patch', `/jobs/${jobId}`, payload);
+      logger.debug(`Heartbeat sent for job #${jobId}${statusEvent ? ' (with event)' : ''}`);
     } catch (error) {
       logger.warn(`Error sending heartbeat for job #${jobId}: ${error.message}`);
     }
@@ -501,19 +507,27 @@ class ApiClient {
    * Batches chunks for efficiency
    * @param {number} jobId - Job ID
    * @param {string} chunk - Output chunk
+   * @param {Object} metadata - Optional metadata for milestones/events
    */
-  async sendProgress(jobId, chunk) {
+  async sendProgress(jobId, chunk, metadata = null) {
     // Initialize buffer for this job if needed
     if (!this.progressBuffer.has(jobId)) {
       this.progressBuffer.set(jobId, []);
     }
 
-    // Add chunk to buffer with timestamp
+    // Add chunk to buffer with timestamp and optional metadata
     const buffer = this.progressBuffer.get(jobId);
-    buffer.push({
+    const entry = {
       chunk,
       timestamp: Date.now()
-    });
+    };
+
+    // Phase 2.3: Include metadata for milestones/events (reduces API calls)
+    if (metadata && Object.keys(metadata).length > 0) {
+      entry.metadata = metadata;
+    }
+
+    buffer.push(entry);
 
     // Flush immediately if buffer is full
     if (buffer.length >= this.MAX_BATCH_SIZE) {
