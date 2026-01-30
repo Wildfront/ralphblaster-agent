@@ -100,10 +100,12 @@ const loggingConfig = {
   /**
    * Maximum number of logs to batch before forcing a flush
    * Larger values reduce API calls but may delay log visibility
+   * Phase 1.3: Increased from 10 to 50 to match progress batch size
+   * Expected impact: 80% reduction in log API calls (50 req/s → 10 req/s)
    * @type {number}
-   * @default 10
+   * @default 50
    */
-  maxBatchSize: getEnvInt('MAX_BATCH_SIZE', 10),
+  maxBatchSize: getEnvInt('MAX_BATCH_SIZE', 50),
 
   /**
    * Time in milliseconds between automatic log flushes
