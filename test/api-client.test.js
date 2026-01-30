@@ -167,43 +167,55 @@ describe('ApiClient', () => {
   });
 
   describe('markJobCompleted()', () => {
-    test('includes prd_content for prd jobs', async () => {
+    test('sends metadata-only (no output/prd_content re-transmission)', async () => {
       mockAxiosInstance.patch.mockResolvedValue({});
 
       const result = {
-        output: 'Output text',
-        prdContent: 'PRD content here',
+        output: 'Output text',  // Not sent - already streamed
+        prdContent: 'PRD content here',  // Not sent - already streamed
         executionTimeMs: 1000
       };
 
       await apiClient.markJobCompleted(1, result);
 
+      // Phase 2.2: Output and prd_content are NOT sent (already streamed via progress_batch)
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/1', {
         status: 'completed',
-        output: 'Output text',
-        execution_time_ms: 1000,
-        prd_content: 'PRD content here'
+        execution_time_ms: 1000
+        // Note: No output or prd_content - reduces payload from 10MB+ to <1KB
       });
     });
 
-    test('includes summary/branch for code jobs', async () => {
+    test('includes summary/branch/git_activity metadata for code jobs', async () => {
       mockAxiosInstance.patch.mockResolvedValue({});
 
       const result = {
-        output: 'Output text',
+        output: 'Output text',  // Not sent - already streamed
         summary: 'Implemented feature X',
         branchName: 'feature/test',
-        executionTimeMs: 2000
+        executionTimeMs: 2000,
+        gitActivity: {
+          commitCount: 3,
+          lastCommit: 'abc123',
+          pushedToRemote: true
+        }
       };
 
       await apiClient.markJobCompleted(1, result);
 
+      // Phase 2.2: Only metadata sent, no output re-transmission
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/1', {
         status: 'completed',
-        output: 'Output text',
         execution_time_ms: 2000,
         summary: 'Implemented feature X',
-        branch_name: 'feature/test'
+        branch_name: 'feature/test',
+        git_activity: {
+          commit_count: 3,
+          last_commit: 'abc123',
+          changes: null,
+          pushed_to_remote: true,
+          has_uncommitted_changes: false
+        }
       });
     });
 

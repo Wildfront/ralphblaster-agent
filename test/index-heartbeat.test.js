@@ -33,7 +33,8 @@ describe('RalphAgent - Heartbeat', () => {
       markJobCompleted: jest.fn(),
       markJobFailed: jest.fn(),
       sendHeartbeat: jest.fn(),
-      sendProgress: jest.fn()
+      sendProgress: jest.fn(),
+      sendStatusEvent: jest.fn()
     };
 
     mockExecutor = {
@@ -53,26 +54,23 @@ describe('RalphAgent - Heartbeat', () => {
   });
 
   describe('startHeartbeat()', () => {
-    test('sends heartbeat every 20s', () => {
+    test('sends combined heartbeat + status event every 20s', async () => {
       mockApiClient.sendHeartbeat.mockResolvedValue();
-
+      agent.jobStartTime = Date.now();
       agent.startHeartbeat(1);
 
-      // No heartbeat yet
-      expect(mockApiClient.sendHeartbeat).not.toHaveBeenCalled();
-
-      // After 20 seconds
       jest.advanceTimersByTime(20000);
+      await Promise.resolve();
+
       expect(mockApiClient.sendHeartbeat).toHaveBeenCalledTimes(1);
-      expect(mockApiClient.sendHeartbeat).toHaveBeenCalledWith(1);
+      expect(mockApiClient.sendHeartbeat).toHaveBeenCalledWith(1, {
+        event_type: 'heartbeat',
+        message: expect.stringMatching(/Still working\.\.\./),
+        metadata: { elapsed_ms: expect.any(Number) }
+      });
 
-      // After another 20 seconds
-      jest.advanceTimersByTime(20000);
-      expect(mockApiClient.sendHeartbeat).toHaveBeenCalledTimes(2);
-
-      // After another 20 seconds
-      jest.advanceTimersByTime(20000);
-      expect(mockApiClient.sendHeartbeat).toHaveBeenCalledTimes(3);
+      // Verify sendStatusEvent is NOT called separately
+      expect(mockApiClient.sendStatusEvent).not.toHaveBeenCalled();
     });
 
     test('sets heartbeatInterval', () => {
