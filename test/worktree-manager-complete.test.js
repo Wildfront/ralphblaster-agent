@@ -197,6 +197,7 @@ describe('WorktreeManager - Complete Coverage', () => {
       const job = {
         id: 3,
         task_id: 3,
+        task_title: 'Test Task',
         project: { system_path: '/test' }
       };
 
@@ -232,7 +233,7 @@ describe('WorktreeManager - Complete Coverage', () => {
           'worktree',
           'add',
           '-b',
-          'blaster/ticket-3/job-3',
+          'blaster/test-task-3/job-3',
           '/test-worktrees/job-3',
           'HEAD'
         ],
@@ -248,6 +249,7 @@ describe('WorktreeManager - Complete Coverage', () => {
       const job = {
         id: 4,
         task_id: 4,
+        task_title: 'Feature X',
         project: { system_path: '/test' }
       };
 
@@ -283,7 +285,7 @@ describe('WorktreeManager - Complete Coverage', () => {
 
       expect(spawn).toHaveBeenCalledWith(
         'git',
-        expect.arrayContaining(['-b', 'blaster/ticket-4/job-4']),
+        expect.arrayContaining(['-b', 'blaster/feature-x-4/job-4']),
         expect.any(Object)
       );
     });
@@ -570,36 +572,39 @@ describe('WorktreeManager - Complete Coverage', () => {
   });
 
   describe('getBranchName()', () => {
-    test('generates branch name with format blaster/ticket-X/job-Y', () => {
+    test('generates branch name with slugified title', () => {
       const job = {
         id: 14,
-        task_id: 15
+        task_id: 15,
+        task_title: 'Add User Authentication'
       };
 
       const branchName = manager.getBranchName(job);
 
-      expect(branchName).toBe('blaster/ticket-15/job-14');
+      expect(branchName).toBe('blaster/add-user-authentication-15/job-14');
     });
 
     test('generates branch name with different task and job IDs', () => {
       const job1 = {
         id: 100,
-        task_id: 200
+        task_id: 200,
+        task_title: 'Fix Login Bug'
       };
 
       const job2 = {
         id: 300,
-        task_id: 400
+        task_id: 400,
+        task_title: 'Implement Dashboard'
       };
 
       const branch1 = manager.getBranchName(job1);
       const branch2 = manager.getBranchName(job2);
 
-      expect(branch1).toBe('blaster/ticket-200/job-100');
-      expect(branch2).toBe('blaster/ticket-400/job-300');
+      expect(branch1).toBe('blaster/fix-login-bug-200/job-100');
+      expect(branch2).toBe('blaster/implement-dashboard-400/job-300');
     });
 
-    test('uses task_id not task for ticket number', () => {
+    test('uses task_id as fallback when task_title is missing', () => {
       const job = {
         id: 50,
         task_id: 99
@@ -607,7 +612,81 @@ describe('WorktreeManager - Complete Coverage', () => {
 
       const branchName = manager.getBranchName(job);
 
-      expect(branchName).toContain('ticket-99');
+      expect(branchName).toBe('blaster/task-99-99/job-50');
+    });
+
+    test('handles titles with special characters', () => {
+      const job = {
+        id: 60,
+        task_id: 70,
+        task_title: 'Fix: User@Login (Bug #123)'
+      };
+
+      const branchName = manager.getBranchName(job);
+
+      expect(branchName).toBe('blaster/fix-userlogin-bug-123-70/job-60');
+    });
+
+    test('handles very long titles by truncating', () => {
+      const job = {
+        id: 80,
+        task_id: 90,
+        task_title: 'This is a very long task title that exceeds the maximum allowed length and should be truncated to fit'
+      };
+
+      const branchName = manager.getBranchName(job);
+
+      expect(branchName.length).toBeLessThanOrEqual('blaster/'.length + 50 + '-90/job-80'.length);
+      expect(branchName).toContain('blaster/this-is-a-very-long-task-title');
+    });
+  });
+
+  describe('slugifyTitle()', () => {
+    test('converts title to lowercase', () => {
+      const result = manager.slugifyTitle('Add User Authentication');
+      expect(result).toBe('add-user-authentication');
+    });
+
+    test('replaces spaces with hyphens', () => {
+      const result = manager.slugifyTitle('fix the bug');
+      expect(result).toBe('fix-the-bug');
+    });
+
+    test('removes special characters', () => {
+      const result = manager.slugifyTitle('Fix: User@Login (Bug #123)');
+      expect(result).toBe('fix-userlogin-bug-123');
+    });
+
+    test('handles multiple consecutive spaces', () => {
+      const result = manager.slugifyTitle('fix    multiple    spaces');
+      expect(result).toBe('fix-multiple-spaces');
+    });
+
+    test('removes leading and trailing hyphens', () => {
+      const result = manager.slugifyTitle('---fix bug---');
+      expect(result).toBe('fix-bug');
+    });
+
+    test('replaces multiple hyphens with single hyphen', () => {
+      const result = manager.slugifyTitle('fix---the---bug');
+      expect(result).toBe('fix-the-bug');
+    });
+
+    test('truncates to 50 characters', () => {
+      const longTitle = 'This is a very long title that exceeds the maximum allowed length';
+      const result = manager.slugifyTitle(longTitle);
+      expect(result.length).toBeLessThanOrEqual(50);
+      expect(result).toBe('this-is-a-very-long-title-that-exceeds-the-maximum');
+    });
+
+    test('handles empty string', () => {
+      const result = manager.slugifyTitle('');
+      expect(result).toBe('');
+    });
+
+    test('handles string with only special characters', () => {
+      const result = manager.slugifyTitle('!@#$%^&*()');
+      expect(result).toBe('');
     });
   });
 
