@@ -14,7 +14,7 @@ const REGULAR_API_TIMEOUT_MS = 15000;  // 15s for regular API calls
 const BATCH_API_TIMEOUT_MS = 30000;    // 30s for batch operations
 
 // API endpoint versions
-const NEW_API_PREFIX = '/api/v1/ralphblaster';
+const NEW_API_PREFIX = '/api/v1/rb';
 const OLD_API_PREFIX = '/api/v1/ralph';
 
 class ApiClient {
@@ -195,7 +195,7 @@ class ApiClient {
 
       // If we successfully used new endpoints, log once
       if (this.useNewEndpoints && endpoint === newEndpoint) {
-        logger.debug('Using new /api/v1/ralphblaster/* endpoints');
+        logger.debug('Using new /api/v1/rb/* endpoints');
       }
 
       return response;
