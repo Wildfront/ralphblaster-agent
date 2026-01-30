@@ -97,14 +97,14 @@ class Executor {
     this.claudeRunner.setJobId(job.id);
 
     // Display human-friendly job description
-    const jobDescription = job.job_type === 'prd_generation'
+    const jobDescription = job.job_type === 'plan_generation'
       ? `${job.prd_mode === 'plan' ? 'plan' : 'PRD'} generation`
       : job.job_type;
 
     logger.info(`Executing ${jobDescription} job #${job.id}`);
 
     // Route to appropriate handler based on job type
-    if (job.job_type === 'prd_generation') {
+    if (job.job_type === 'plan_generation') {
       return await this.executePrdGeneration(job, onProgress, startTime);
     } else if (job.job_type === 'code_execution') {
       return await this.executeCodeImplementation(job, onProgress, startTime);
