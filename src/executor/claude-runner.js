@@ -184,13 +184,10 @@ class ClaudeRunner {
             }
 
             await this.apiClient.sendStatusEvent(jobId, eventType, message, metadata);
-          } else if (block.type === 'text' && block.text) {
-            // Send Claude's reasoning/explanation text as progress_update
-            const text = block.text.slice(0, 200);
-            if (text.length > 10) { // Skip very short messages
-              await this.apiClient.sendStatusEvent(jobId, 'progress_update', `💭 ${text}`, {});
-            }
           }
+          // Phase 1.4: REMOVED duplicate text block status events
+          // Text blocks are already captured in progress chunks, so this was redundant
+          // Expected impact: Eliminate 5-10 duplicate events per job
         }
       }
     } catch (err) {
