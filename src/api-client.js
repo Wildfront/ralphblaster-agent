@@ -357,11 +357,14 @@ class ApiClient {
       const payload = {
         status: 'completed',
         // Phase 2.2: REMOVED output (already streamed via progress_batch)
-        // Phase 2.2: REMOVED prd_content (already streamed via progress_batch)
         execution_time_ms: result.executionTimeMs
       };
 
       // Add job-type specific fields with validation
+      if (result.prdContent) {
+        logger.debug('Adding PRD content to payload', { length: result.prdContent.length });
+        payload.prd_content = this.validateOutput(result.prdContent);
+      }
       if (result.summary) {
         logger.debug('Adding summary to payload', { length: result.summary.length });
         payload.summary = this.validateOutput(result.summary, 10000); // 10KB max
