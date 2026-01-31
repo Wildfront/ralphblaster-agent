@@ -278,7 +278,7 @@ class ApiClient {
       }
 
       if (error.response?.status === 403) {
-        logger.error('API token lacks ralph_agent permission');
+        logger.error('API token lacks rb_agent permission');
         throw new Error('Invalid API token permissions');
       }
 
@@ -710,7 +710,7 @@ class ApiClient {
     }
 
     // Validate job_type is one of the known types
-    const validJobTypes = ['prd_generation', 'code_execution'];
+    const validJobTypes = ['plan_generation', 'code_execution'];
     if (!validJobTypes.includes(job.job_type)) {
       return `Unknown job type: ${job.job_type}`;
     }
@@ -735,8 +735,8 @@ class ApiClient {
       }
     }
 
-    // For prd_generation jobs, validate project if present
-    if (job.job_type === 'prd_generation' && job.project) {
+    // For plan_generation jobs, validate project if present
+    if (job.job_type === 'plan_generation' && job.project) {
       if (typeof job.project !== 'object') {
         return 'Project must be an object if provided';
       }
