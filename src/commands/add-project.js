@@ -143,7 +143,7 @@ class AddProjectCommand {
         if (status === 401) {
           throw new Error('Invalid API token. Please run "ralphblaster init" first.');
         } else if (status === 403) {
-          throw new Error('API token lacks "ralph_agent" permission. Please generate a new agent token.');
+          throw new Error('API token lacks "rb_agent" permission. Please generate a new agent token.');
         } else if (status === 422) {
           throw new Error(`Validation error: ${errorMessage}`);
         } else {
