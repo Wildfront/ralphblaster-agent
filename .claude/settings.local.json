@@ -78,7 +78,8 @@
       "Bash(for file in src/**/*.js)",
       "Bash(do node -c \"$file\")",
       "Bash(claude --output-format stream-json --permission-mode acceptEdits)",
-      "Bash(claude --output-format stream-json --permission-mode acceptEdits --verbose)"
+      "Bash(claude --output-format stream-json --permission-mode acceptEdits --verbose)",
+      "Bash(bundle exec rspec:*)"
     ]
   }
 }
