@@ -52,7 +52,7 @@ describe('ApiClient Progress Updates', () => {
       await apiClient.flushProgressBuffer(123);
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/123/progress_batch',
+        '/api/v1/rb/jobs/123/progress_batch',
         { updates: [{ chunk: 'Some output chunk', timestamp: expect.any(Number) }] }
       );
     });
@@ -75,7 +75,7 @@ describe('ApiClient Progress Updates', () => {
 
       expect(mockAxiosInstance.post).toHaveBeenCalledTimes(1);
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/456/progress_batch',
+        '/api/v1/rb/jobs/456/progress_batch',
         {
           updates: [
             { chunk: 'Chunk 1\n', timestamp: expect.any(Number) },
@@ -98,7 +98,7 @@ describe('ApiClient Progress Updates', () => {
       await apiClient.flushProgressBuffer(789);
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/789/progress_batch',
+        '/api/v1/rb/jobs/789/progress_batch',
         { updates: [{ chunk: '', timestamp: expect.any(Number) }] }
       );
     });
@@ -117,7 +117,7 @@ describe('ApiClient Progress Updates', () => {
       await apiClient.flushProgressBuffer(111);
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/111/progress_batch',
+        '/api/v1/rb/jobs/111/progress_batch',
         { updates: [{ chunk: largeChunk, timestamp: expect.any(Number) }] }
       );
     });
@@ -172,7 +172,7 @@ describe('ApiClient Progress Updates', () => {
       await apiClient.flushProgressBuffer(555);
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/555/progress_batch',
+        '/api/v1/rb/jobs/555/progress_batch',
         { updates: [{ chunk: specialChunk, timestamp: expect.any(Number) }] }
       );
     });
@@ -191,7 +191,7 @@ describe('ApiClient Progress Updates', () => {
       await apiClient.flushProgressBuffer(666);
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/666/progress_batch',
+        '/api/v1/rb/jobs/666/progress_batch',
         { updates: [{ chunk: unicodeChunk, timestamp: expect.any(Number) }] }
       );
     });

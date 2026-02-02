@@ -54,7 +54,7 @@ describe('Progress Batching', () => {
       // Should have sent 1 batched request with 10 chunks
       expect(mockAxiosInstance.post).toHaveBeenCalledTimes(1);
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/1/progress_batch',
+        '/api/v1/rb/jobs/1/progress_batch',
         {
           updates: expect.arrayContaining([
             { chunk: 'chunk 0', timestamp: expect.any(Number) },
@@ -198,13 +198,13 @@ describe('Progress Batching', () => {
 
       // Progress should have been flushed
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/1/progress_batch',
+        '/api/v1/rb/jobs/1/progress_batch',
         expect.any(Object)
       );
 
       // Completion request should have been sent
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/1',
+        '/api/v1/rb/jobs/1',
         expect.objectContaining({
           status: 'completed'
         })

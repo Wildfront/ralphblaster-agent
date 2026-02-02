@@ -104,7 +104,7 @@ describe('ApiClient Edge Cases', () => {
     test('rejects job with non-string prompt', () => {
       const job = {
         id: 123,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test',
         prompt: 12345 // Should be string or null
       };
@@ -117,7 +117,7 @@ describe('ApiClient Edge Cases', () => {
     test('accepts job with null prompt', () => {
       const job = {
         id: 123,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test',
         prompt: null
       };
@@ -130,7 +130,7 @@ describe('ApiClient Edge Cases', () => {
     test('accepts job with undefined prompt', () => {
       const job = {
         id: 123,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test'
         // prompt is undefined (not present)
       };
@@ -140,10 +140,10 @@ describe('ApiClient Edge Cases', () => {
       expect(error).toBeNull();
     });
 
-    test('rejects prd_generation job with non-object project', () => {
+    test('rejects plan_generation job with non-object project', () => {
       const job = {
         id: 123,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test',
         project: 'not-an-object' // Should be object or undefined
       };
@@ -153,10 +153,10 @@ describe('ApiClient Edge Cases', () => {
       expect(error).toBe('Project must be an object if provided');
     });
 
-    test('accepts prd_generation job without project', () => {
+    test('accepts plan_generation job without project', () => {
       const job = {
         id: 123,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test'
         // project is undefined
       };
@@ -166,10 +166,10 @@ describe('ApiClient Edge Cases', () => {
       expect(error).toBeNull();
     });
 
-    test('accepts prd_generation job with project but null system_path', () => {
+    test('accepts plan_generation job with project but null system_path', () => {
       const job = {
         id: 123,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test',
         project: {
           name: 'Test Project',
@@ -182,10 +182,10 @@ describe('ApiClient Edge Cases', () => {
       expect(error).toBeNull();
     });
 
-    test('rejects prd_generation job with non-string system_path', () => {
+    test('rejects plan_generation job with non-string system_path', () => {
       const job = {
         id: 123,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test',
         project: {
           system_path: 12345 // Should be string or null
@@ -197,10 +197,10 @@ describe('ApiClient Edge Cases', () => {
       expect(error).toBe('Project system_path must be a string if provided');
     });
 
-    test('accepts prd_generation job with valid project and system_path', () => {
+    test('accepts plan_generation job with valid project and system_path', () => {
       const job = {
         id: 123,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test',
         project: {
           name: 'My Project',
@@ -225,7 +225,7 @@ describe('ApiClient Edge Cases', () => {
       });
 
       const result = {
-        output: 'PRD output',
+        output: 'PRD output',  // Not sent - already streamed
         prdContent: 'The PRD content here',
         executionTimeMs: 5000
       };
@@ -233,12 +233,12 @@ describe('ApiClient Edge Cases', () => {
       await apiClient.markJobCompleted(123, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/123',
+        '/api/v1/rb/jobs/123',
         {
           status: 'completed',
-          output: 'PRD output',
           execution_time_ms: 5000,
           prd_content: 'The PRD content here'
+          // Note: output not included (already streamed)
         }
       );
     });
@@ -253,7 +253,7 @@ describe('ApiClient Edge Cases', () => {
       });
 
       const result = {
-        output: 'Code output',
+        output: 'Code output',  // Not sent - already streamed
         summary: 'Implemented feature X',
         branchName: 'feature/x',
         executionTimeMs: 10000
@@ -262,13 +262,13 @@ describe('ApiClient Edge Cases', () => {
       await apiClient.markJobCompleted(456, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/456',
+        '/api/v1/rb/jobs/456',
         {
           status: 'completed',
-          output: 'Code output',
           execution_time_ms: 10000,
           summary: 'Implemented feature X',
           branch_name: 'feature/x'
+          // Note: output not included (already streamed)
         }
       );
     });
@@ -283,7 +283,7 @@ describe('ApiClient Edge Cases', () => {
       });
 
       const result = {
-        output: 'Output only',
+        output: 'Output only',  // Not sent - already streamed
         executionTimeMs: 1000
         // No prdContent, summary, or branchName
       };
@@ -291,11 +291,11 @@ describe('ApiClient Edge Cases', () => {
       await apiClient.markJobCompleted(789, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/789',
+        '/api/v1/rb/jobs/789',
         {
           status: 'completed',
-          output: 'Output only',
           execution_time_ms: 1000
+          // No output (already streamed), no optional fields
         }
       );
     });
@@ -310,7 +310,7 @@ describe('ApiClient Edge Cases', () => {
       });
 
       const result = {
-        output: 'Full output',
+        output: 'Full output',  // Not sent - already streamed
         prdContent: 'PRD',
         summary: 'Summary',
         branchName: 'branch',
@@ -320,14 +320,14 @@ describe('ApiClient Edge Cases', () => {
       await apiClient.markJobCompleted(999, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/999',
+        '/api/v1/rb/jobs/999',
         {
           status: 'completed',
-          output: 'Full output',
           execution_time_ms: 2000,
           prd_content: 'PRD',
           summary: 'Summary',
           branch_name: 'branch'
+          // Note: output not included (already streamed)
         }
       );
     });
@@ -360,7 +360,7 @@ describe('ApiClient Edge Cases', () => {
       await apiClient.markJobFailed(123, 'Error occurred', null);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/123',
+        '/api/v1/rb/jobs/123',
         {
           status: 'failed',
           error: 'Error occurred',
@@ -385,7 +385,7 @@ describe('ApiClient Edge Cases', () => {
       );
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/456',
+        '/api/v1/rb/jobs/456',
         {
           status: 'failed',
           error: 'Execution failed',
