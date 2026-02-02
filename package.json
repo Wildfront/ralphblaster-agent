@@ -1,6 +1,6 @@
 {
   "name": "ralphblaster",
-  "version": "1.4.3",
+  "version": "1.5.0",
   "description": "RalphBlaster agent that polls for and executes coding jobs via Claude CLI",
   "main": "src/index.js",
   "bin": {
