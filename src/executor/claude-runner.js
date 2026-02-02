@@ -88,31 +88,60 @@ class ClaudeRunner {
 
       case 'tool_use':
       case 'tool_result':
-        // Don't show generic tool messages - we send better structured events via sendToolStatusEvent
+        // Tool usage is shown via assistant event content blocks
         return null;
 
       case 'thinking':
-        // Skip thinking blocks - we send these via sendToolStatusEvent as progress_update
+        // Thinking content is verbose, skip for cleaner output
         return null;
 
       case 'error':
         return `\n❌ Error: ${event.error?.message || 'Unknown error'}\n`;
 
       case 'assistant': {
-        // Only extract Claude's actual text responses, not tool invocations
+        // Extract both text and tool usage for terminal display
         const content = event.message?.content || [];
-        const textParts = [];
+        const parts = [];
+
         for (const block of content) {
           if (block.type === 'text' && block.text) {
-            // Only include substantial text (not just whitespace)
+            // Include substantial text (not just whitespace)
             const trimmed = block.text.trim();
             if (trimmed.length > 0) {
-              textParts.push(block.text);
+              parts.push(block.text);
+            }
+          } else if (block.type === 'tool_use') {
+            // Show tool usage in terminal for visibility
+            const toolName = block.name;
+            const input = block.input || {};
+
+            switch (toolName) {
+              case 'Read':
+                parts.push(`\n📖 Reading: ${input.file_path || 'file'}\n`);
+                break;
+              case 'Edit':
+                parts.push(`\n✏️  Editing: ${input.file_path || 'file'}\n`);
+                break;
+              case 'Write':
+                parts.push(`\n📝 Creating: ${input.file_path || 'file'}\n`);
+                break;
+              case 'Bash':
+                const cmd = input.command?.slice(0, 60) || 'command';
+                parts.push(`\n💻 Running: ${cmd}${input.command?.length > 60 ? '...' : ''}\n`);
+                break;
+              case 'Grep':
+              case 'Glob':
+                parts.push(`\n🔍 Searching: ${input.pattern || input.glob || 'files'}\n`);
+                break;
+              case 'Task':
+                parts.push(`\n🔄 Subtask: ${input.description?.slice(0, 60) || 'working...'}\n`);
+                break;
+              default:
+                parts.push(`\n🔧 ${toolName}\n`);
             }
           }
-          // Skip tool_use blocks - we handle those via sendToolStatusEvent
         }
-        return textParts.length > 0 ? textParts.join('') : null;
+        return parts.length > 0 ? parts.join('') : null;
       }
 
       case 'user':
