@@ -16,6 +16,9 @@ const config = {
   // Execution configuration
   maxRetries: getEnvInt('MAX_RETRIES', 3),
 
+  // Agent limit configuration
+  maxAgentsPerUser: getEnvInt('MAX_AGENTS_PER_USER', 10),
+
   // Logging configuration (imported from centralized logging/config.js)
   // These are re-exported here for backward compatibility
   logLevel: loggingConfig.logLevel,
