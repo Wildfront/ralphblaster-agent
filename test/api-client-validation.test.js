@@ -41,7 +41,7 @@ describe('ApiClient - validateJob()', () => {
   describe('Job ID validation', () => {
     test('rejects job with missing id', () => {
       const job = {
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test task'
       };
       const error = apiClient.validateJob(job);
@@ -51,7 +51,7 @@ describe('ApiClient - validateJob()', () => {
     test('rejects job with invalid id (0)', () => {
       const job = {
         id: 0,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test task'
       };
       const error = apiClient.validateJob(job);
@@ -61,7 +61,7 @@ describe('ApiClient - validateJob()', () => {
     test('rejects job with invalid id (negative)', () => {
       const job = {
         id: -1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test task'
       };
       const error = apiClient.validateJob(job);
@@ -71,7 +71,7 @@ describe('ApiClient - validateJob()', () => {
     test('rejects job with invalid id (non-number)', () => {
       const job = {
         id: 'not-a-number',
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test task'
       };
       const error = apiClient.validateJob(job);
@@ -124,7 +124,7 @@ describe('ApiClient - validateJob()', () => {
     test('rejects job with missing task_title', () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation'
+        job_type: 'plan_generation'
       };
       const error = apiClient.validateJob(job);
       expect(error).toBe('Task title is missing or invalid');
@@ -133,7 +133,7 @@ describe('ApiClient - validateJob()', () => {
     test('rejects job with empty task_title', () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: ''
       };
       const error = apiClient.validateJob(job);
@@ -143,7 +143,7 @@ describe('ApiClient - validateJob()', () => {
     test('rejects job with whitespace-only task_title', () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: '   '
       };
       const error = apiClient.validateJob(job);
@@ -151,21 +151,21 @@ describe('ApiClient - validateJob()', () => {
     });
   });
 
-  describe('Valid prd_generation jobs', () => {
-    test('accepts valid prd_generation job', () => {
+  describe('Valid plan_generation jobs', () => {
+    test('accepts valid plan_generation job', () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test task'
       };
       const error = apiClient.validateJob(job);
       expect(error).toBeNull();
     });
 
-    test('accepts prd_generation job with optional prompt', () => {
+    test('accepts plan_generation job with optional prompt', () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test task',
         prompt: 'Test prompt'
       };
@@ -173,10 +173,10 @@ describe('ApiClient - validateJob()', () => {
       expect(error).toBeNull();
     });
 
-    test('accepts prd_generation job with null prompt', () => {
+    test('accepts plan_generation job with null prompt', () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test task',
         prompt: null
       };

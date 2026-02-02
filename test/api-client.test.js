@@ -51,7 +51,7 @@ describe('ApiClient', () => {
       const result = await apiClient.getNextJob();
 
       expect(result).toBeNull();
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/next', {
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/rb/jobs/next', {
         params: { timeout: 30 },
         timeout: 35000  // Updated to 30s + 5s buffer = 35s
       });
@@ -80,7 +80,7 @@ describe('ApiClient', () => {
     test('returns job on success', async () => {
       const mockJob = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test task'
       };
 
@@ -97,7 +97,7 @@ describe('ApiClient', () => {
     test('rejects invalid job from API', async () => {
       const invalidJob = {
         id: -1, // Invalid ID
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test task'
       };
 
@@ -154,7 +154,7 @@ describe('ApiClient', () => {
 
       await apiClient.markJobRunning(1);
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/1', {
+      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/rb/jobs/1', {
         status: 'running'
       });
     });
@@ -167,22 +167,22 @@ describe('ApiClient', () => {
   });
 
   describe('markJobCompleted()', () => {
-    test('sends metadata-only (no output/prd_content re-transmission)', async () => {
+    test('sends completion with prd_content (output excluded)', async () => {
       mockAxiosInstance.patch.mockResolvedValue({});
 
       const result = {
         output: 'Output text',  // Not sent - already streamed
-        prdContent: 'PRD content here',  // Not sent - already streamed
+        prdContent: 'PRD content here',  // Sent - needed for plan generation jobs (commit 84049b5)
         executionTimeMs: 1000
       };
 
       await apiClient.markJobCompleted(1, result);
 
-      // Phase 2.2: Output and prd_content are NOT sent (already streamed via progress_batch)
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/1', {
+      // Phase 2.2: Output is NOT sent (already streamed), but prd_content IS sent
+      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/rb/jobs/1', {
         status: 'completed',
+        prd_content: 'PRD content here',
         execution_time_ms: 1000
-        // Note: No output or prd_content - reduces payload from 10MB+ to <1KB
       });
     });
 
@@ -204,7 +204,7 @@ describe('ApiClient', () => {
       await apiClient.markJobCompleted(1, result);
 
       // Phase 2.2: Only metadata sent, no output re-transmission
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/1', {
+      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/rb/jobs/1', {
         status: 'completed',
         execution_time_ms: 2000,
         summary: 'Implemented feature X',
@@ -240,7 +240,7 @@ describe('ApiClient', () => {
 
       await apiClient.markJobFailed(1, 'Error message', 'Partial output');
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/1', {
+      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/rb/jobs/1', {
         status: 'failed',
         error: 'Error message',
         output: 'Partial output'
@@ -266,7 +266,7 @@ describe('ApiClient', () => {
 
       await apiClient.sendHeartbeat(1);
 
-      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/1', {
+      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/rb/jobs/1', {
         status: 'running',
         heartbeat: true
       });
@@ -285,7 +285,7 @@ describe('ApiClient', () => {
 
       await apiClient.getNextJob();
 
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/ralphblaster/jobs/next', expect.any(Object));
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/rb/jobs/next', expect.any(Object));
     });
 
     test('falls back to old endpoints on 404', async () => {
@@ -301,7 +301,7 @@ describe('ApiClient', () => {
 
       // Should have tried both endpoints
       expect(mockAxiosInstance.get).toHaveBeenCalledTimes(2);
-      expect(mockAxiosInstance.get).toHaveBeenNthCalledWith(1, '/api/v1/ralphblaster/jobs/next', expect.any(Object));
+      expect(mockAxiosInstance.get).toHaveBeenNthCalledWith(1, '/api/v1/rb/jobs/next', expect.any(Object));
       expect(mockAxiosInstance.get).toHaveBeenNthCalledWith(2, '/api/v1/ralph/jobs/next', expect.any(Object));
     });
 
@@ -343,7 +343,7 @@ describe('ApiClient', () => {
       expect(mockAxiosInstance.post).toHaveBeenCalledTimes(2);
       expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(
         1,
-        '/api/v1/ralphblaster/jobs/1/events',
+        '/api/v1/rb/jobs/1/events',
         expect.any(Object)
       );
       expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(
@@ -363,7 +363,7 @@ describe('ApiClient', () => {
       expect(mockAxiosInstance.patch).toHaveBeenCalledTimes(2);
       expect(mockAxiosInstance.patch).toHaveBeenNthCalledWith(
         1,
-        '/api/v1/ralphblaster/jobs/1',
+        '/api/v1/rb/jobs/1',
         expect.any(Object)
       );
       expect(mockAxiosInstance.patch).toHaveBeenNthCalledWith(

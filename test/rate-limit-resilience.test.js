@@ -231,7 +231,7 @@ describe('Rate Limit Resilience', () => {
       // Should have made 2 attempts (initial + 1 retry)
       expect(mockAxiosInstance.post).toHaveBeenCalledTimes(2);
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/1/progress_batch',
+        '/api/v1/rb/jobs/1/progress_batch',
         { updates: [{ chunk: 'test chunk', timestamp: expect.any(Number) }] }
       );
     }, 5000);

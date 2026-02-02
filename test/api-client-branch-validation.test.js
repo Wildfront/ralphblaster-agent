@@ -53,7 +53,7 @@ describe('ApiClient - Branch Name Validation', () => {
       await apiClient.markJobCompleted(123, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/123',
+        '/api/v1/rb/jobs/123',
         expect.objectContaining({
           branch_name: 'feature-123'
         })
@@ -75,7 +75,7 @@ describe('ApiClient - Branch Name Validation', () => {
       await apiClient.markJobCompleted(123, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/123',
+        '/api/v1/rb/jobs/123',
         expect.objectContaining({
           branch_name: 'feature/user-auth'
         })
@@ -94,7 +94,7 @@ describe('ApiClient - Branch Name Validation', () => {
       await apiClient.markJobCompleted(123, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/123',
+        '/api/v1/rb/jobs/123',
         expect.objectContaining({
           branch_name: 'feature/v2/user-auth'
         })
@@ -209,7 +209,7 @@ describe('ApiClient - Branch Name Validation', () => {
       await apiClient.markJobCompleted(123, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/123',
+        '/api/v1/rb/jobs/123',
         expect.objectContaining({
           branch_name: validName
         })
@@ -243,7 +243,7 @@ describe('ApiClient - Branch Name Validation', () => {
       await apiClient.markJobCompleted(123, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/123',
+        '/api/v1/rb/jobs/123',
         expect.objectContaining({
           branch_name: 'feature_user_auth'
         })
@@ -262,7 +262,7 @@ describe('ApiClient - Branch Name Validation', () => {
       await apiClient.markJobCompleted(123, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/123',
+        '/api/v1/rb/jobs/123',
         expect.objectContaining({
           branch_name: '123-feature'
         })
@@ -311,7 +311,7 @@ describe('ApiClient - Branch Name Validation', () => {
       await apiClient.markJobCompleted(123, result);
 
       expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
-        '/api/v1/ralphblaster/jobs/123',
+        '/api/v1/rb/jobs/123',
         expect.objectContaining({
           branch_name: 'feature/JIRA-123_user-auth-v2'
         })
