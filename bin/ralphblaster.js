@@ -8,8 +8,10 @@ const agentsIndex = args.findIndex(arg => arg.startsWith('--agents='));
 let agentCount = null;
 if (agentsIndex !== -1) {
   agentCount = parseInt(args[agentsIndex].split('=')[1], 10);
-  if (isNaN(agentCount) || agentCount < 1 || agentCount > 20) {
-    console.error('Error: --agents flag requires a number between 1 and 20');
+  // Get max agents from environment variable (default: 10)
+  const maxAgents = parseInt(process.env.RALPHBLASTER_MAX_AGENTS_PER_USER || process.env.RALPH_MAX_AGENTS_PER_USER || '10', 10);
+  if (isNaN(agentCount) || agentCount < 1 || agentCount > maxAgents) {
+    console.error(`Error: --agents flag requires a number between 1 and ${maxAgents}`);
     process.exit(1);
   }
 }
@@ -56,7 +58,7 @@ Commands:
   add-project           Register current directory as a RalphBlaster project
 
 Options:
-  --agents=<count>      Run multiple agents concurrently (1-20, default: 1)
+  --agents=<count>      Run multiple agents concurrently (1-10, default: 1)
   --token=<token>       API token for authentication
   --api-url=<url>       API base URL (default: https://hq.ralphblaster.com)
   --help, -h            Show this help message
@@ -81,6 +83,7 @@ Environment Variables:
   RALPHBLASTER_API_TOKEN       API token (RALPH_API_TOKEN also supported)
   RALPHBLASTER_API_URL         API base URL (RALPH_API_URL also supported)
   RALPHBLASTER_LOG_LEVEL       Log level: error, warn, info, debug (default: info)
+  RALPHBLASTER_MAX_AGENTS_PER_USER  Max concurrent agents (default: 10)
   RALPHBLASTER_ALLOWED_PATHS   Colon-separated list of allowed base paths
                                (optional security whitelist)
   RALPHBLASTER_AGENT_ID        Agent identifier for multi-agent setups
