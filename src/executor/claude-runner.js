@@ -5,8 +5,23 @@ const { formatDuration } = require('../utils/format');
 
 // Timeout constants
 const TIMEOUTS = {
-  CLAUDE_EXECUTION_MS: 7200000, // 2 hours for Claude CLI execution
+  CLAUDE_EXECUTION_MS: 7200000, // 2 hours (fallback/default only)
+  DEFAULT_TIMEOUT_MINUTES: 60,  // Default timeout if not specified in job
+  SAFETY_MARGIN_MINUTES: 1      // Agent terminates 1 min before Rails timeout
 };
+
+/**
+ * Calculate Claude execution timeout from job configuration
+ * Agent terminates 1 minute before Rails timeout to ensure clean state
+ * @param {Object} job - Job object from Rails API
+ * @returns {number} Timeout in milliseconds
+ */
+function getClaudeTimeout(job) {
+  const timeoutMinutes = job.timeout_minutes || TIMEOUTS.DEFAULT_TIMEOUT_MINUTES;
+  const safetyMarginMinutes = TIMEOUTS.SAFETY_MARGIN_MINUTES;
+  const effectiveMinutes = Math.max(timeoutMinutes - safetyMarginMinutes, 5); // Min 5 minutes
+  return effectiveMinutes * 60 * 1000;  // Convert to milliseconds
+}
 
 /**
  * ClaudeRunner - Handles Claude CLI execution
@@ -250,17 +265,27 @@ class ClaudeRunner {
    * @param {string} prompt - Prompt text
    * @param {string} cwd - Working directory
    * @param {Function} onProgress - Progress callback
-   * @param {number} timeout - Timeout in milliseconds (default: 2 hours for code execution)
+   * @param {number} timeout - Timeout in milliseconds (calculated from job.timeout_minutes)
+   * @param {Object} job - Job object (optional, for logging timeout details)
    * @returns {Promise<string>} Command output
    */
-  runClaude(prompt, cwd, onProgress, timeout = TIMEOUTS.CLAUDE_EXECUTION_MS) {
+  runClaude(prompt, cwd, onProgress, timeout = TIMEOUTS.CLAUDE_EXECUTION_MS, job = null) {
     return new Promise((resolve, reject) => {
       const timeoutFormatted = formatDuration(timeout);
-      logger.info(`Starting Claude CLI execution`, {
+      const logData = {
         timeout: timeoutFormatted,
         workingDirectory: cwd,
         promptLength: prompt.length
-      });
+      };
+
+      // Log timeout configuration if job provided
+      if (job && job.timeout_minutes) {
+        logData.jobTimeoutMinutes = job.timeout_minutes;
+        logData.calculatedTimeoutMinutes = Math.floor(timeout / 60000);
+        logger.info(`Using job-specific timeout: ${job.timeout_minutes} minutes (agent will terminate at ${Math.floor(timeout / 60000)} minutes)`);
+      }
+
+      logger.info(`Starting Claude CLI execution`, logData);
 
       // Use stdin to pass prompt - avoids shell injection
       // Use stream-json format for structured progress events
@@ -435,13 +460,18 @@ class ClaudeRunner {
    */
   async runClaudeDirectly(worktreePath, prompt, job, onProgress) {
     const startTime = Date.now();
-    const timeout = TIMEOUTS.CLAUDE_EXECUTION_MS;
+    const timeout = getClaudeTimeout(job);
 
-    logger.info(`Running Claude Code in worktree: ${worktreePath}`, {
+    const logData = {
       timeout: formatDuration(timeout),
       workingDirectory: worktreePath,
-      promptLength: prompt.length
-    });
+      promptLength: prompt.length,
+      jobTimeoutMinutes: job.timeout_minutes || TIMEOUTS.DEFAULT_TIMEOUT_MINUTES,
+      calculatedTimeoutMinutes: Math.floor(timeout / 60000)
+    };
+
+    logger.info(`Running Claude Code in worktree: ${worktreePath}`, logData);
+    logger.info(`Using job-specific timeout: ${job.timeout_minutes || TIMEOUTS.DEFAULT_TIMEOUT_MINUTES} minutes (agent will terminate at ${Math.floor(timeout / 60000)} minutes)`);
 
     // Send to API/UI
     if (this.apiClient && this.apiClient.sendProgress) {
