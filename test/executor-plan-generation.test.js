@@ -73,7 +73,7 @@ describe('Executor - Plan Generation', () => {
     test('executes plan generation with valid job and prompt', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         prd_mode: 'plan',
         task_title: 'Test Plan',
         prompt: 'Create a plan for feature X',
@@ -276,7 +276,7 @@ describe('Executor - Plan Generation', () => {
         // Should use process.cwd()
         expect(spawn).toHaveBeenCalledWith(
           'claude',
-          ['--output-format', 'stream-json', '--permission-mode', 'acceptEdits', '--verbose'],
+          ['-p', '--output-format', 'stream-json', '--permission-mode', 'acceptEdits', '--verbose'],
           expect.objectContaining({
             cwd: process.cwd()
           })
@@ -316,7 +316,7 @@ describe('Executor - Plan Generation', () => {
       setTimeout(() => {
         expect(spawn).toHaveBeenCalledWith(
           'claude',
-          ['--output-format', 'stream-json', '--permission-mode', 'acceptEdits', '--verbose'],
+          ['-p', '--output-format', 'stream-json', '--permission-mode', 'acceptEdits', '--verbose'],
           expect.objectContaining({
             cwd: process.cwd()
           })
