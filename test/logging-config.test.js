@@ -56,7 +56,7 @@ describe('Logging Config', () => {
 
       const loggingConfig = require('../src/logging/config');
 
-      expect(loggingConfig.maxBatchSize).toBe(10);
+      expect(loggingConfig.maxBatchSize).toBe(50);
     });
 
     test('uses default flush interval when not set', () => {
@@ -208,7 +208,7 @@ describe('Logging Config', () => {
 
       const loggingConfig = require('../src/logging/config');
 
-      expect(loggingConfig.maxBatchSize).toBe(10); // Default
+      expect(loggingConfig.maxBatchSize).toBe(50); // Default
       expect(console.warn).toHaveBeenCalledWith(
         expect.stringContaining('Invalid numeric value "-10"')
       );
@@ -225,7 +225,7 @@ describe('Logging Config', () => {
 
       const loggingConfig = require('../src/logging/config');
 
-      expect(loggingConfig.maxBatchSize).toBe(10); // Default
+      expect(loggingConfig.maxBatchSize).toBe(50); // Default
       expect(console.warn).toHaveBeenCalledWith(
         expect.stringContaining('Invalid numeric value "0"')
       );
@@ -242,7 +242,7 @@ describe('Logging Config', () => {
 
       const loggingConfig = require('../src/logging/config');
 
-      expect(loggingConfig.maxBatchSize).toBe(10); // Default
+      expect(loggingConfig.maxBatchSize).toBe(50); // Default
       expect(console.warn).toHaveBeenCalledWith(
         expect.stringContaining('Invalid numeric value "not-a-number"')
       );
