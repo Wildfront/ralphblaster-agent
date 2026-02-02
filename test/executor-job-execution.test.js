@@ -65,10 +65,10 @@ describe('Executor - Job Execution', () => {
   });
 
   describe('execute()', () => {
-    test('routes prd_generation jobs correctly', async () => {
+    test('routes plan_generation jobs correctly', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: 'Generate PRD'
       };
@@ -119,7 +119,8 @@ describe('Executor - Job Execution', () => {
       expect(result.summary).toBe('Implemented feature');
     });
 
-    test('routes clarifying_questions jobs correctly', async () => {
+    // Skipping: clarifying_questions job type was removed from backend (commit f1298539)
+    test.skip('routes clarifying_questions jobs correctly', async () => {
       const job = {
         id: 1,
         job_type: 'clarifying_questions',
@@ -193,7 +194,7 @@ describe('Executor - Job Execution', () => {
     test('uses process.cwd() when no project path', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: 'Generate PRD'
       };
@@ -225,7 +226,7 @@ describe('Executor - Job Execution', () => {
 
       expect(spawn).toHaveBeenCalledWith(
         'claude',
-        ['--output-format', 'stream-json', '--permission-mode', 'acceptEdits', '--verbose'],
+        ['-p', '--output-format', 'stream-json', '--permission-mode', 'acceptEdits', '--verbose'],
         expect.objectContaining({
           cwd: process.cwd()
         })
@@ -235,7 +236,7 @@ describe('Executor - Job Execution', () => {
     test('uses server-provided prompt when available', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: 'Server provided prompt'
       };

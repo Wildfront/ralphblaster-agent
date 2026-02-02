@@ -76,7 +76,7 @@ describe('RalphAgent - Graceful Shutdown', () => {
     test('marks current job as failed', async () => {
       agent.currentJob = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test'
       };
 
@@ -111,7 +111,7 @@ describe('RalphAgent - Graceful Shutdown', () => {
     test('stopHeartbeat is called before marking job complete', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test'
       };
 
@@ -140,7 +140,7 @@ describe('RalphAgent - Graceful Shutdown', () => {
     test('stopHeartbeat is called before marking job failed', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test'
       };
 

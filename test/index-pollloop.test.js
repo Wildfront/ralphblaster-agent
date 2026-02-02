@@ -63,7 +63,7 @@ describe('RalphAgent Poll Loop', () => {
     test('processes jobs when available and continues polling', async () => {
       jest.useFakeTimers();
 
-      const job1 = { id: 1, job_type: 'prd_generation', task_title: 'Task 1' };
+      const job1 = { id: 1, job_type: 'plan_generation', task_title: 'Task 1' };
       const job2 = { id: 2, job_type: 'code_execution', task_title: 'Task 2', project: { system_path: '/path' } };
 
       let callCount = 0;
@@ -178,7 +178,7 @@ describe('RalphAgent Poll Loop', () => {
     test('polls for next job after processing with rate limiting', async () => {
       jest.useFakeTimers();
 
-      const job = { id: 1, job_type: 'prd_generation', task_title: 'Task' };
+      const job = { id: 1, job_type: 'plan_generation', task_title: 'Task' };
 
       let callCount = 0;
       mockApiClient.getNextJob.mockImplementation(() => {

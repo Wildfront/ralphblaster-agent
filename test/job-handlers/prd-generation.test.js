@@ -108,7 +108,7 @@ describe('PrdGenerationHandler', () => {
     test('throws error when no prompt provided', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD'
       };
 
@@ -119,7 +119,7 @@ describe('PrdGenerationHandler', () => {
     test('throws error when prompt is empty', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: '   '
       };
@@ -131,7 +131,7 @@ describe('PrdGenerationHandler', () => {
     test('validates prompt for security', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: 'Valid prompt'
       };
@@ -151,7 +151,7 @@ describe('PrdGenerationHandler', () => {
     test('uses process.cwd() when no project path provided', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: 'Generate PRD'
       };
@@ -176,7 +176,7 @@ describe('PrdGenerationHandler', () => {
     test('uses sanitized project path when provided', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: 'Generate PRD',
         project: {
@@ -209,7 +209,7 @@ describe('PrdGenerationHandler', () => {
     test('falls back to cwd for invalid project path', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: 'Generate PRD',
         project: {
@@ -238,7 +238,7 @@ describe('PrdGenerationHandler', () => {
     test('falls back to cwd for non-existent project path', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: 'Generate PRD',
         project: {
@@ -268,7 +268,7 @@ describe('PrdGenerationHandler', () => {
     test('sends status event when PRD generation starts', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: 'Generate PRD'
       };
@@ -292,7 +292,7 @@ describe('PrdGenerationHandler', () => {
     test('sends completion status event', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: 'Generate PRD'
       };
@@ -315,7 +315,7 @@ describe('PrdGenerationHandler', () => {
     test('returns correct result format', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: 'Generate PRD'
       };
@@ -343,7 +343,7 @@ describe('PrdGenerationHandler', () => {
     test('handles Claude runner errors and sends failure event', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: 'Generate PRD'
       };
@@ -365,7 +365,7 @@ describe('PrdGenerationHandler', () => {
     test('handles log file write errors gracefully', async () => {
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: 'Generate PRD'
       };
@@ -415,7 +415,7 @@ describe('PrdGenerationHandler', () => {
 
       const job = {
         id: 1,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test PRD',
         prompt: 'Generate PRD'
       };

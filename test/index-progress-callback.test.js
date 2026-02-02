@@ -69,7 +69,7 @@ describe('RalphAgent Progress Callback Error Handling', () => {
     test('job completes successfully even when progress update fails', async () => {
       const job = {
         id: 123,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test task'
       };
 
@@ -145,7 +145,7 @@ describe('RalphAgent Progress Callback Error Handling', () => {
     test('progress updates continue after one fails', async () => {
       const job = {
         id: 789,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test task'
       };
 
@@ -213,7 +213,7 @@ describe('RalphAgent Progress Callback Error Handling', () => {
     test('progress callback handles empty chunks gracefully', async () => {
       const job = {
         id: 111,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test'
       };
 
@@ -302,7 +302,7 @@ describe('RalphAgent Progress Callback Error Handling', () => {
     test('throttles rapid progress updates to max 10 per second', async () => {
       const job = {
         id: 333,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test throttling'
       };
 
@@ -335,7 +335,7 @@ describe('RalphAgent Progress Callback Error Handling', () => {
     test('allows progress update after throttle period expires', async () => {
       const job = {
         id: 444,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Test throttle expiry'
       };
 
@@ -370,13 +370,13 @@ describe('RalphAgent Progress Callback Error Handling', () => {
     test('allows progress updates across different jobs', async () => {
       const job1 = {
         id: 555,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Job 1'
       };
 
       const job2 = {
         id: 556,
-        job_type: 'prd_generation',
+        job_type: 'plan_generation',
         task_title: 'Job 2'
       };
 
