@@ -32,7 +32,7 @@ RalphBlaster Agent is a distributed autonomous coding agent that polls a Rails A
 ### Global Installation
 
 ```bash
-npm install -g ralphblaster
+npm install -g ralphblaster-agent
 ```
 
 ### Local Installation
@@ -46,7 +46,7 @@ npm install
 ### Using npx (No Installation Required)
 
 ```bash
-npx ralphblaster --token=your_token_here
+npx ralphblaster-agent --token=your_token_here
 ```
 
 ## Usage
