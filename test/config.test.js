@@ -1,6 +1,11 @@
 // Config tests need to manipulate environment variables before requiring the module
 // So we'll use a helper to reload the config module with different env vars
 
+// Mock dotenv to prevent loading .env file during tests
+jest.mock('dotenv', () => ({
+  config: jest.fn()
+}));
+
 // Mock ConfigFileManager before requiring config
 jest.mock('../src/config-file-manager', () => {
   return jest.fn().mockImplementation(() => ({
@@ -73,6 +78,7 @@ describe('Config', () => {
   describe('Environment variable parsing', () => {
     test('parses RALPH_MAX_RETRIES as integer', () => {
       process.env.RALPH_API_TOKEN = 'test-token';
+      delete process.env.RALPHBLASTER_MAX_RETRIES; // Clear new variable to test old one
       process.env.RALPH_MAX_RETRIES = '5';
 
       const config = require('../src/config');
@@ -123,6 +129,7 @@ describe('Config', () => {
 
     test('uses custom max retries when set', () => {
       process.env.RALPH_API_TOKEN = 'test-token';
+      delete process.env.RALPHBLASTER_MAX_RETRIES; // Clear new variable to test old one
       process.env.RALPH_MAX_RETRIES = '10';
 
       const config = require('../src/config');
@@ -132,6 +139,7 @@ describe('Config', () => {
 
     test('uses custom log level when set', () => {
       process.env.RALPH_API_TOKEN = 'test-token';
+      delete process.env.RALPHBLASTER_LOG_LEVEL; // Clear new variable to test old one
       process.env.RALPH_LOG_LEVEL = 'debug';
 
       const config = require('../src/config');
