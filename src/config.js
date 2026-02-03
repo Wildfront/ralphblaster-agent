@@ -1,7 +1,27 @@
 require('dotenv').config();
 const ConfigFileManager = require('./config-file-manager');
 const loggingConfig = require('./logging/config');
-const { getEnv, getEnvInt } = require('./utils/env-compat');
+
+/**
+ * Parse a positive integer from environment variable
+ * @param {string} value - Environment variable value
+ * @param {number} defaultValue - Default value if not set or invalid
+ * @returns {number} Parsed positive integer
+ */
+function parseEnvInt(value, defaultValue) {
+  if (value === undefined || value === null) {
+    return defaultValue;
+  }
+
+  const parsed = parseInt(value, 10);
+
+  // Validate: must be a number and positive
+  if (isNaN(parsed) || parsed <= 0) {
+    return defaultValue;
+  }
+
+  return parsed;
+}
 
 // Load config from ~/.ralphblasterrc
 const configFileManager = new ConfigFileManager();
@@ -9,15 +29,15 @@ const fileConfig = configFileManager.read() || {};
 
 const config = {
   // API configuration
-  // Priority: 1. Environment variable (RALPHBLASTER_* or RALPH_*), 2. ~/.ralphblasterrc, 3. Default
-  apiUrl: getEnv('API_URL') || fileConfig.apiUrl || 'https://hq.ralphblaster.com',
-  apiToken: getEnv('API_TOKEN') || fileConfig.apiToken,
+  // Priority: 1. Environment variable (RALPHBLASTER_*), 2. ~/.ralphblasterrc, 3. Default
+  apiUrl: process.env.RALPHBLASTER_API_URL || fileConfig.apiUrl || 'https://hq.ralphblaster.com',
+  apiToken: process.env.RALPHBLASTER_API_TOKEN || fileConfig.apiToken,
 
   // Execution configuration
-  maxRetries: getEnvInt('MAX_RETRIES', 3),
+  maxRetries: parseEnvInt(process.env.RALPHBLASTER_MAX_RETRIES, 3),
 
   // Agent limit configuration
-  maxAgentsPerUser: getEnvInt('MAX_AGENTS_PER_USER', 10),
+  maxAgentsPerUser: parseEnvInt(process.env.RALPHBLASTER_MAX_AGENTS_PER_USER, 10),
 
   // Logging configuration (imported from centralized logging/config.js)
   // These are re-exported here for backward compatibility
@@ -28,7 +48,7 @@ const config = {
 
 // Validate required configuration
 if (!config.apiToken) {
-  const errorMessage = 'RALPHBLASTER_API_TOKEN (or RALPH_API_TOKEN) environment variable is required\n' +
+  const errorMessage = 'RALPHBLASTER_API_TOKEN environment variable is required\n' +
     '\nRun "ralphblaster init --token=YOUR_TOKEN" to save your token,\n' +
     'or set the RALPHBLASTER_API_TOKEN environment variable.';
   throw new Error(errorMessage);
