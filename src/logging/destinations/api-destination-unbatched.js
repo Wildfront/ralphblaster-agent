@@ -108,8 +108,9 @@ class ApiDestinationUnbatched extends BaseDestination {
    * @protected
    */
   handleError(error, level, message) {
-    // Silent failure to prevent cascading errors
-    // In production, you might want to log to console or file as fallback
+    // Silently fail - setup logs are best-effort and shouldn't disrupt job execution
+    // Logging errors about logging would create cascading failures and noise
+    // If API logging fails, the job continues unaffected
     // console.error(`[ApiDestination Error] Failed to send log: ${error.message}`);
   }
 }

@@ -1,5 +1,4 @@
 const loggingConfig = require('./logging/config');
-const SetupLogBatcher = require('./setup-log-batcher');
 const LogManager = require('./logging/log-manager');
 const { ConsoleDestination } = require('./logging/destinations');
 
@@ -16,15 +15,8 @@ const logManager = new LogManager([consoleDestination], {
   agentId: loggingConfig.agentId
 });
 
-// Legacy job context tracking for backward compatibility
-// This tracks the SetupLogBatcher for the clearJobContext API
-let legacyJobContext = {
-  batcher: null
-};
-
 /**
  * Internal log function that delegates to LogManager
- * Maintains backward compatibility with the existing logging API
  * @param {string} level - Log level ('error', 'warn', 'info', 'debug')
  * @param {string} message - Log message to output
  * @param {Object|null} data - Optional structured metadata to include
@@ -36,9 +28,9 @@ function log(level, message, data = null) {
     // Silently handle errors to prevent cascading failures
   });
 
-  // For error level, also trigger immediate flush on legacy batcher if present
-  if (level === 'error' && legacyJobContext.batcher) {
-    legacyJobContext.batcher.flush().catch(() => {}); // Best-effort immediate flush
+  // For error level, trigger immediate flush
+  if (level === 'error') {
+    logManager.flush().catch(() => {}); // Best-effort immediate flush
   }
 }
 
@@ -101,19 +93,11 @@ module.exports = {
    * Uses batching to reduce API overhead (flushes every 2s or when 10 logs buffered)
    * @param {number} jobId - Job ID
    * @param {Object} apiClient - API client instance
-   * @param {Object} context - Optional global context to add to all logs (Phase 3)
+   * @param {Object} context - Optional global context to add to all logs
    */
   setJobContext: (jobId, apiClient, context = {}) => {
     // Set job context in LogManager
     logManager.setJobContext(jobId, context);
-
-    // Create legacy batcher for backward compatibility
-    // This is kept for the immediate flush on error behavior
-    legacyJobContext.batcher = new SetupLogBatcher(apiClient, jobId, {
-      maxBatchSize: loggingConfig.maxBatchSize,
-      flushInterval: loggingConfig.flushInterval,
-      useBatchEndpoint: loggingConfig.useBatchEndpoint
-    });
   },
 
   /**
@@ -121,12 +105,6 @@ module.exports = {
    * Ensures all buffered logs are flushed before shutdown
    */
   clearJobContext: async () => {
-    // Shutdown legacy batcher and flush remaining logs
-    if (legacyJobContext.batcher) {
-      await legacyJobContext.batcher.shutdown();
-      legacyJobContext.batcher = null;
-    }
-
     // Clear job context in LogManager
     await logManager.clearJobContext();
   },
