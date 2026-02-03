@@ -18,9 +18,15 @@ describe('RalphAgent Exception Handlers', () => {
   let mockExecutor;
   let originalProcessOn;
   let processListeners;
+  let consoleErrorSpy;
+  let consoleLogSpy;
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Suppress console output for exception handler messages during tests
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 
     // Capture process.on listeners
     processListeners = {};
@@ -58,6 +64,14 @@ describe('RalphAgent Exception Handlers', () => {
       clearInterval(agent.heartbeatInterval);
     }
     process.on = originalProcessOn;
+
+    // Restore console output
+    if (consoleErrorSpy) {
+      consoleErrorSpy.mockRestore();
+    }
+    if (consoleLogSpy) {
+      consoleLogSpy.mockRestore();
+    }
   });
 
   describe('setupShutdownHandlers()', () => {
