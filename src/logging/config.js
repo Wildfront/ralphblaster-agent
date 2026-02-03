@@ -9,7 +9,33 @@
  * @module logging/config
  */
 
-const { getEnv, getEnvBoolean, getEnvInt } = require('../utils/env-compat');
+/**
+ * Parse boolean from environment variable
+ * Treats 'false', '0', and empty string as false, everything else as true
+ * @param {string} value - Environment variable value
+ * @param {boolean} defaultValue - Default if not set
+ * @returns {boolean}
+ */
+function parseEnvBoolean(value, defaultValue) {
+  if (value === undefined || value === null) return defaultValue;
+  return value !== 'false' && value !== '0' && value !== '';
+}
+
+/**
+ * Parse positive integer from environment variable
+ * @param {string} value - Environment variable value
+ * @param {number} defaultValue - Default if not set or invalid
+ * @returns {number}
+ */
+function parseEnvInt(value, defaultValue) {
+  if (value === undefined || value === null) return defaultValue;
+  const parsed = parseInt(value, 10);
+  if (isNaN(parsed) || parsed <= 0) {
+    console.warn(`Invalid numeric value "${value}", using default: ${defaultValue}`);
+    return defaultValue;
+  }
+  return parsed;
+}
 
 /**
  * Valid log levels in order of severity
@@ -42,8 +68,7 @@ function isValidConsoleFormat(format) {
 }
 
 // Read configuration from environment variables with validation
-// Uses getEnv() for backward compatibility with RALPH_* variables
-const rawLogLevel = getEnv('LOG_LEVEL', 'info');
+const rawLogLevel = process.env.RALPHBLASTER_LOG_LEVEL || 'info';
 const logLevel = isValidLogLevel(rawLogLevel) ? rawLogLevel : 'info';
 
 // Warn if invalid log level was provided
@@ -51,7 +76,7 @@ if (!isValidLogLevel(rawLogLevel)) {
   console.warn(`Invalid log level "${rawLogLevel}", using default: info. Valid levels: ${VALID_LOG_LEVELS.join(', ')}`);
 }
 
-const rawConsoleFormat = getEnv('CONSOLE_FORMAT', 'pretty');
+const rawConsoleFormat = process.env.RALPHBLASTER_CONSOLE_FORMAT || 'pretty';
 const consoleFormat = isValidConsoleFormat(rawConsoleFormat) ? rawConsoleFormat : 'pretty';
 
 // Warn if invalid console format was provided
@@ -68,7 +93,6 @@ const loggingConfig = {
 
   /**
    * Log level - controls which messages are displayed
-   * Priority: RALPHBLASTER_LOG_LEVEL > RALPH_LOG_LEVEL > Default
    * @type {'error' | 'warn' | 'info' | 'debug'}
    * @default 'info'
    */
@@ -76,16 +100,14 @@ const loggingConfig = {
 
   /**
    * Enable/disable colored console output
-   * Priority: RALPHBLASTER_CONSOLE_COLORS > RALPH_CONSOLE_COLORS > Default
    * Set to 'false' to disable colors (useful for log files or CI environments)
    * @type {boolean}
    * @default true
    */
-  consoleColors: getEnvBoolean('CONSOLE_COLORS', true),
+  consoleColors: parseEnvBoolean(process.env.RALPHBLASTER_CONSOLE_COLORS, true),
 
   /**
    * Console output format
-   * Priority: RALPHBLASTER_CONSOLE_FORMAT > RALPH_CONSOLE_FORMAT > Default
    * - 'pretty': Human-readable format with colors (default)
    * - 'json': Structured JSON format for machine parsing
    * @type {'pretty' | 'json'}
@@ -105,7 +127,7 @@ const loggingConfig = {
    * @type {number}
    * @default 50
    */
-  maxBatchSize: getEnvInt('MAX_BATCH_SIZE', 50),
+  maxBatchSize: parseEnvInt(process.env.RALPHBLASTER_MAX_BATCH_SIZE, 50),
 
   /**
    * Time in milliseconds between automatic log flushes
@@ -113,7 +135,7 @@ const loggingConfig = {
    * @type {number}
    * @default 2000 (2 seconds)
    */
-  flushInterval: getEnvInt('FLUSH_INTERVAL', 2000),
+  flushInterval: parseEnvInt(process.env.RALPHBLASTER_FLUSH_INTERVAL, 2000),
 
   /**
    * Whether to use the batch endpoint for sending logs
@@ -122,18 +144,17 @@ const loggingConfig = {
    * @type {boolean}
    * @default true
    */
-  useBatchEndpoint: getEnvBoolean('USE_BATCH_ENDPOINT', true),
+  useBatchEndpoint: parseEnvBoolean(process.env.RALPHBLASTER_USE_BATCH_ENDPOINT, true),
 
   // ===== Agent Identification =====
 
   /**
    * Agent ID for multi-agent support
-   * Priority: RALPHBLASTER_AGENT_ID > RALPH_AGENT_ID > Default
    * Used to identify which agent instance is running in multi-agent deployments
    * @type {string}
    * @default 'agent-default'
    */
-  agentId: getEnv('AGENT_ID', 'agent-default'),
+  agentId: process.env.RALPHBLASTER_AGENT_ID || 'agent-default',
 
   // ===== Validation Helpers =====
 
