@@ -42,28 +42,19 @@ describe('Config', () => {
 
   describe('API Token validation', () => {
     test('throws error when API token is missing', () => {
-      delete process.env.RALPH_API_TOKEN;
       delete process.env.RALPHBLASTER_API_TOKEN;
 
       expect(() => {
         require('../src/config');
-      }).toThrow('RALPHBLASTER_API_TOKEN (or RALPH_API_TOKEN) environment variable is required');
+      }).toThrow('RALPHBLASTER_API_TOKEN environment variable is required');
     });
 
     test('throws error when API token is empty string', () => {
-      process.env.RALPH_API_TOKEN = '';
+      process.env.RALPHBLASTER_API_TOKEN = '';
 
       expect(() => {
         require('../src/config');
-      }).toThrow('RALPHBLASTER_API_TOKEN (or RALPH_API_TOKEN) environment variable is required');
-    });
-
-    test('accepts valid RALPH_API_TOKEN (backward compatibility)', () => {
-      process.env.RALPH_API_TOKEN = 'valid-token-123';
-
-      const config = require('../src/config');
-
-      expect(config.apiToken).toBe('valid-token-123');
+      }).toThrow('RALPHBLASTER_API_TOKEN environment variable is required');
     });
 
     test('accepts valid RALPHBLASTER_API_TOKEN', () => {
@@ -73,22 +64,12 @@ describe('Config', () => {
 
       expect(config.apiToken).toBe('valid-token-456');
     });
-
-    test('prefers RALPHBLASTER_API_TOKEN over RALPH_API_TOKEN', () => {
-      process.env.RALPH_API_TOKEN = 'old-token';
-      process.env.RALPHBLASTER_API_TOKEN = 'new-token';
-
-      const config = require('../src/config');
-
-      expect(config.apiToken).toBe('new-token');
-    });
   });
 
   describe('Environment variable parsing', () => {
-    test('parses RALPH_MAX_RETRIES as integer', () => {
-      process.env.RALPH_API_TOKEN = 'test-token';
-      delete process.env.RALPHBLASTER_MAX_RETRIES; // Clear new variable to test old one
-      process.env.RALPH_MAX_RETRIES = '5';
+    test('parses RALPHBLASTER_MAX_RETRIES as integer', () => {
+      process.env.RALPHBLASTER_API_TOKEN = 'test-token';
+      process.env.RALPHBLASTER_MAX_RETRIES = '5';
 
       const config = require('../src/config');
 
@@ -99,8 +80,8 @@ describe('Config', () => {
 
   describe('Default values', () => {
     test('uses default API URL when not set', () => {
-      process.env.RALPH_API_TOKEN = 'test-token';
-      delete process.env.RALPH_API_URL;
+      process.env.RALPHBLASTER_API_TOKEN = 'test-token';
+      delete process.env.RALPHBLASTER_API_URL;
 
       const config = require('../src/config');
 
@@ -108,8 +89,8 @@ describe('Config', () => {
     });
 
     test('uses default max retries when not set', () => {
-      process.env.RALPH_API_TOKEN = 'test-token';
-      delete process.env.RALPH_MAX_RETRIES;
+      process.env.RALPHBLASTER_API_TOKEN = 'test-token';
+      delete process.env.RALPHBLASTER_MAX_RETRIES;
 
       const config = require('../src/config');
 
@@ -117,8 +98,8 @@ describe('Config', () => {
     });
 
     test('uses default log level when not set', () => {
-      process.env.RALPH_API_TOKEN = 'test-token';
-      delete process.env.RALPH_LOG_LEVEL;
+      process.env.RALPHBLASTER_API_TOKEN = 'test-token';
+      delete process.env.RALPHBLASTER_LOG_LEVEL;
 
       const config = require('../src/config');
 
@@ -128,8 +109,8 @@ describe('Config', () => {
 
   describe('Custom values', () => {
     test('uses custom API URL when set', () => {
-      process.env.RALPH_API_TOKEN = 'test-token';
-      process.env.RALPH_API_URL = 'https://custom-api.com';
+      process.env.RALPHBLASTER_API_TOKEN = 'test-token';
+      process.env.RALPHBLASTER_API_URL = 'https://custom-api.com';
 
       const config = require('../src/config');
 
@@ -137,9 +118,8 @@ describe('Config', () => {
     });
 
     test('uses custom max retries when set', () => {
-      process.env.RALPH_API_TOKEN = 'test-token';
-      delete process.env.RALPHBLASTER_MAX_RETRIES; // Clear new variable to test old one
-      process.env.RALPH_MAX_RETRIES = '10';
+      process.env.RALPHBLASTER_API_TOKEN = 'test-token';
+      process.env.RALPHBLASTER_MAX_RETRIES = '10';
 
       const config = require('../src/config');
 
@@ -147,9 +127,8 @@ describe('Config', () => {
     });
 
     test('uses custom log level when set', () => {
-      process.env.RALPH_API_TOKEN = 'test-token';
-      delete process.env.RALPHBLASTER_LOG_LEVEL; // Clear new variable to test old one
-      process.env.RALPH_LOG_LEVEL = 'debug';
+      process.env.RALPHBLASTER_API_TOKEN = 'test-token';
+      process.env.RALPHBLASTER_LOG_LEVEL = 'debug';
 
       const config = require('../src/config');
 
@@ -159,8 +138,8 @@ describe('Config', () => {
 
   describe('Integer parsing edge cases', () => {
     test('handles invalid max retries gracefully', () => {
-      process.env.RALPH_API_TOKEN = 'test-token';
-      process.env.RALPH_MAX_RETRIES = 'not-a-number';
+      process.env.RALPHBLASTER_API_TOKEN = 'test-token';
+      process.env.RALPHBLASTER_MAX_RETRIES = 'not-a-number';
 
       const config = require('../src/config');
 
@@ -169,8 +148,8 @@ describe('Config', () => {
     });
 
     test('handles negative max retries', () => {
-      process.env.RALPH_API_TOKEN = 'test-token';
-      process.env.RALPH_MAX_RETRIES = '-5';
+      process.env.RALPHBLASTER_API_TOKEN = 'test-token';
+      process.env.RALPHBLASTER_MAX_RETRIES = '-5';
 
       const config = require('../src/config');
 
@@ -179,8 +158,8 @@ describe('Config', () => {
     });
 
     test('handles zero max retries', () => {
-      process.env.RALPH_API_TOKEN = 'test-token';
-      process.env.RALPH_MAX_RETRIES = '0';
+      process.env.RALPHBLASTER_API_TOKEN = 'test-token';
+      process.env.RALPHBLASTER_MAX_RETRIES = '0';
 
       const config = require('../src/config');
 

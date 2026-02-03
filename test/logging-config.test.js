@@ -29,7 +29,7 @@ describe('Logging Config', () => {
 
   describe('Default values', () => {
     test('uses default log level when not set', () => {
-      delete process.env.RALPH_LOG_LEVEL;
+      delete process.env.RALPHBLASTER_LOG_LEVEL;
 
       const loggingConfig = require('../src/logging/config');
 
@@ -37,7 +37,7 @@ describe('Logging Config', () => {
     });
 
     test('uses default console colors when not set', () => {
-      delete process.env.RALPH_CONSOLE_COLORS;
+      delete process.env.RALPHBLASTER_CONSOLE_COLORS;
 
       const loggingConfig = require('../src/logging/config');
 
@@ -45,7 +45,7 @@ describe('Logging Config', () => {
     });
 
     test('uses default console format when not set', () => {
-      delete process.env.RALPH_CONSOLE_FORMAT;
+      delete process.env.RALPHBLASTER_CONSOLE_FORMAT;
 
       const loggingConfig = require('../src/logging/config');
 
@@ -53,7 +53,7 @@ describe('Logging Config', () => {
     });
 
     test('uses default agent ID when not set', () => {
-      delete process.env.RALPH_AGENT_ID;
+      delete process.env.RALPHBLASTER_AGENT_ID;
 
       const loggingConfig = require('../src/logging/config');
 
@@ -61,7 +61,7 @@ describe('Logging Config', () => {
     });
 
     test('uses default batch size when not set', () => {
-      delete process.env.RALPH_MAX_BATCH_SIZE;
+      delete process.env.RALPHBLASTER_MAX_BATCH_SIZE;
 
       const loggingConfig = require('../src/logging/config');
 
@@ -69,7 +69,7 @@ describe('Logging Config', () => {
     });
 
     test('uses default flush interval when not set', () => {
-      delete process.env.RALPH_FLUSH_INTERVAL;
+      delete process.env.RALPHBLASTER_FLUSH_INTERVAL;
 
       const loggingConfig = require('../src/logging/config');
 
@@ -77,7 +77,7 @@ describe('Logging Config', () => {
     });
 
     test('uses default use batch endpoint when not set', () => {
-      delete process.env.RALPH_USE_BATCH_ENDPOINT;
+      delete process.env.RALPHBLASTER_USE_BATCH_ENDPOINT;
 
       const loggingConfig = require('../src/logging/config');
 
@@ -87,7 +87,7 @@ describe('Logging Config', () => {
 
   describe('Custom values', () => {
     test('uses custom log level when set', () => {
-      process.env.RALPH_LOG_LEVEL = 'debug';
+      process.env.RALPHBLASTER_LOG_LEVEL = 'debug';
 
       const loggingConfig = require('../src/logging/config');
 
@@ -95,7 +95,7 @@ describe('Logging Config', () => {
     });
 
     test('disables console colors when explicitly set to false', () => {
-      process.env.RALPH_CONSOLE_COLORS = 'false';
+      process.env.RALPHBLASTER_CONSOLE_COLORS = 'false';
 
       const loggingConfig = require('../src/logging/config');
 
@@ -103,7 +103,7 @@ describe('Logging Config', () => {
     });
 
     test('uses custom console format when set', () => {
-      process.env.RALPH_CONSOLE_FORMAT = 'json';
+      process.env.RALPHBLASTER_CONSOLE_FORMAT = 'json';
 
       const loggingConfig = require('../src/logging/config');
 
@@ -111,7 +111,7 @@ describe('Logging Config', () => {
     });
 
     test('uses custom agent ID when set', () => {
-      process.env.RALPH_AGENT_ID = 'agent-42';
+      process.env.RALPHBLASTER_AGENT_ID = 'agent-42';
 
       const loggingConfig = require('../src/logging/config');
 
@@ -119,7 +119,7 @@ describe('Logging Config', () => {
     });
 
     test('uses custom batch size when set', () => {
-      process.env.RALPH_MAX_BATCH_SIZE = '20';
+      process.env.RALPHBLASTER_MAX_BATCH_SIZE = '20';
 
       const loggingConfig = require('../src/logging/config');
 
@@ -127,7 +127,7 @@ describe('Logging Config', () => {
     });
 
     test('uses custom flush interval when set', () => {
-      process.env.RALPH_FLUSH_INTERVAL = '5000';
+      process.env.RALPHBLASTER_FLUSH_INTERVAL = '5000';
 
       const loggingConfig = require('../src/logging/config');
 
@@ -135,7 +135,7 @@ describe('Logging Config', () => {
     });
 
     test('disables batch endpoint when explicitly set to false', () => {
-      process.env.RALPH_USE_BATCH_ENDPOINT = 'false';
+      process.env.RALPHBLASTER_USE_BATCH_ENDPOINT = 'false';
 
       const loggingConfig = require('../src/logging/config');
 
@@ -145,7 +145,7 @@ describe('Logging Config', () => {
 
   describe('Log level validation', () => {
     test('falls back to info for invalid log level', () => {
-      process.env.RALPH_LOG_LEVEL = 'invalid';
+      process.env.RALPHBLASTER_LOG_LEVEL = 'invalid';
 
       // Suppress console.warn for this test
       const originalWarn = console.warn;
@@ -166,7 +166,7 @@ describe('Logging Config', () => {
 
       validLevels.forEach(level => {
         jest.resetModules();
-        process.env.RALPH_LOG_LEVEL = level;
+        process.env.RALPHBLASTER_LOG_LEVEL = level;
 
         const loggingConfig = require('../src/logging/config');
 
@@ -177,7 +177,7 @@ describe('Logging Config', () => {
 
   describe('Console format validation', () => {
     test('falls back to pretty for invalid console format', () => {
-      process.env.RALPH_CONSOLE_FORMAT = 'invalid';
+      process.env.RALPHBLASTER_CONSOLE_FORMAT = 'invalid';
 
       // Suppress console.warn for this test
       const originalWarn = console.warn;
@@ -198,7 +198,7 @@ describe('Logging Config', () => {
 
       validFormats.forEach(format => {
         jest.resetModules();
-        process.env.RALPH_CONSOLE_FORMAT = format;
+        process.env.RALPHBLASTER_CONSOLE_FORMAT = format;
 
         const loggingConfig = require('../src/logging/config');
 
@@ -209,7 +209,7 @@ describe('Logging Config', () => {
 
   describe('Numeric validation', () => {
     test('rejects negative batch size', () => {
-      process.env.RALPH_MAX_BATCH_SIZE = '-10';
+      process.env.RALPHBLASTER_MAX_BATCH_SIZE = '-10';
 
       // Suppress console.warn for this test
       const originalWarn = console.warn;
@@ -226,7 +226,7 @@ describe('Logging Config', () => {
     });
 
     test('rejects zero batch size', () => {
-      process.env.RALPH_MAX_BATCH_SIZE = '0';
+      process.env.RALPHBLASTER_MAX_BATCH_SIZE = '0';
 
       // Suppress console.warn for this test
       const originalWarn = console.warn;
@@ -243,7 +243,7 @@ describe('Logging Config', () => {
     });
 
     test('rejects non-numeric batch size', () => {
-      process.env.RALPH_MAX_BATCH_SIZE = 'not-a-number';
+      process.env.RALPHBLASTER_MAX_BATCH_SIZE = 'not-a-number';
 
       // Suppress console.warn for this test
       const originalWarn = console.warn;
@@ -260,7 +260,7 @@ describe('Logging Config', () => {
     });
 
     test('rejects negative flush interval', () => {
-      process.env.RALPH_FLUSH_INTERVAL = '-1000';
+      process.env.RALPHBLASTER_FLUSH_INTERVAL = '-1000';
 
       // Suppress console.warn for this test
       const originalWarn = console.warn;
@@ -279,7 +279,7 @@ describe('Logging Config', () => {
 
   describe('Boolean parsing', () => {
     test('treats "false" string as false', () => {
-      process.env.RALPH_CONSOLE_COLORS = 'false';
+      process.env.RALPHBLASTER_CONSOLE_COLORS = 'false';
 
       const loggingConfig = require('../src/logging/config');
 
@@ -287,7 +287,7 @@ describe('Logging Config', () => {
     });
 
     test('treats "0" string as false', () => {
-      process.env.RALPH_CONSOLE_COLORS = '0';
+      process.env.RALPHBLASTER_CONSOLE_COLORS = '0';
 
       const loggingConfig = require('../src/logging/config');
 
@@ -295,7 +295,7 @@ describe('Logging Config', () => {
     });
 
     test('treats empty string as false', () => {
-      process.env.RALPH_CONSOLE_COLORS = '';
+      process.env.RALPHBLASTER_CONSOLE_COLORS = '';
 
       const loggingConfig = require('../src/logging/config');
 
@@ -303,7 +303,7 @@ describe('Logging Config', () => {
     });
 
     test('treats "true" string as true', () => {
-      process.env.RALPH_CONSOLE_COLORS = 'true';
+      process.env.RALPHBLASTER_CONSOLE_COLORS = 'true';
 
       const loggingConfig = require('../src/logging/config');
 
@@ -311,7 +311,7 @@ describe('Logging Config', () => {
     });
 
     test('treats "1" string as true', () => {
-      process.env.RALPH_CONSOLE_COLORS = '1';
+      process.env.RALPHBLASTER_CONSOLE_COLORS = '1';
 
       const loggingConfig = require('../src/logging/config');
 
@@ -319,7 +319,7 @@ describe('Logging Config', () => {
     });
 
     test('treats any other string as true', () => {
-      process.env.RALPH_CONSOLE_COLORS = 'yes';
+      process.env.RALPHBLASTER_CONSOLE_COLORS = 'yes';
 
       const loggingConfig = require('../src/logging/config');
 
