@@ -1,8 +1,5 @@
-const fs = require('fs');
-const fsPromises = require('fs').promises;
 const path = require('path');
 const logger = require('../logger');
-const { formatDuration } = require('../utils/format');
 const { validatePrompt } = require('./prompt-validator');
 const { categorizeError } = require('./error-handler');
 const GitHelper = require('./git-helper');
@@ -11,7 +8,6 @@ const PathHelper = require('./path-helper');
 const PrdGenerationHandler = require('./job-handlers/prd-generation');
 const CodeExecutionHandler = require('./job-handlers/code-execution');
 const ClarifyingQuestionsHandler = require('./job-handlers/clarifying-questions');
-const { getEnv } = require('../utils/env-compat');
 
 // Timeout constants
 const TIMEOUTS = {
@@ -261,7 +257,7 @@ class Executor {
       }
 
       // Check if path is within allowed base paths (if configured)
-      const allowedBasePathsEnv = getEnv('ALLOWED_PATHS');
+      const allowedBasePathsEnv = process.env.RALPHBLASTER_ALLOWED_PATHS;
       const allowedBasePaths = allowedBasePathsEnv
         ? allowedBasePathsEnv.split(':')
         : null;

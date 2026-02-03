@@ -1,6 +1,5 @@
 const ConfigFileManager = require('../config-file-manager');
 const logger = require('../logger');
-const { getEnv } = require('../utils/env-compat');
 
 /**
  * Init Command
@@ -19,13 +18,13 @@ class InitCommand {
       logger.info('Initializing RalphBlaster credentials...');
 
       // Get token from environment variable
-      const token = getEnv('API_TOKEN');
+      const token = process.env.RALPHBLASTER_API_TOKEN;
       if (!token) {
         throw new Error('No API token provided. Please set RALPHBLASTER_API_TOKEN or pass --token=...');
       }
 
       // Get API URL from environment or use default
-      const apiUrl = getEnv('API_URL') || 'https://hq.ralphblaster.com';
+      const apiUrl = process.env.RALPHBLASTER_API_URL || 'https://hq.ralphblaster.com';
 
       // Save credentials to ~/.ralphblasterrc
       this.configFileManager.update({
