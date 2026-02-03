@@ -1,15 +1,16 @@
 const axios = require('axios');
 const config = require('./config');
 const logger = require('./logger');
+const SystemMonitor = require('./system-monitor');
 const packageJson = require('../package.json');
 
 // Agent version from package.json
 const AGENT_VERSION = packageJson.version;
 
 // Timeout constants
-const SERVER_LONG_POLL_TIMEOUT_S = 30; // Server waits up to 30s for job
+const SERVER_LONG_POLL_TIMEOUT_S = 10; // Server waits up to 10s for job (matches server MAX_LONG_POLL_TIMEOUT)
 const NETWORK_BUFFER_MS = 5000;        // 5s buffer for network latency
-const LONG_POLLING_TIMEOUT_MS = (SERVER_LONG_POLL_TIMEOUT_S * 1000) + NETWORK_BUFFER_MS; // 35s
+const LONG_POLLING_TIMEOUT_MS = (SERVER_LONG_POLL_TIMEOUT_S * 1000) + NETWORK_BUFFER_MS; // 15s
 const REGULAR_API_TIMEOUT_MS = 15000;  // 15s for regular API calls
 const BATCH_API_TIMEOUT_MS = 30000;    // 30s for batch operations
 
@@ -21,6 +22,9 @@ class ApiClient {
   constructor(agentId = 'agent-default') {
     this.agentId = agentId;
     this.useNewEndpoints = true; // Start with new endpoints, fall back if needed
+
+    // System monitoring for dynamic capacity reporting
+    this.systemMonitor = new SystemMonitor();
 
     // Rate limiting backoff tracking per endpoint category
     this.rateLimitBackoff = {
@@ -49,6 +53,8 @@ class ApiClient {
       requestConfig.headers.Authorization = `Bearer ${config.apiToken}`;
       requestConfig.headers['X-Agent-Version'] = AGENT_VERSION;
       requestConfig.headers['X-Agent-ID'] = this.agentId;
+      // Add dynamic capacity based on system resources
+      requestConfig.headers['X-Agent-Capacity'] = this.systemMonitor.getCapacity();
       return requestConfig;
     });
 

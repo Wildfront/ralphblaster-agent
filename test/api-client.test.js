@@ -52,8 +52,8 @@ describe('ApiClient', () => {
 
       expect(result).toBeNull();
       expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/rb/jobs/next', {
-        params: { timeout: 30 },
-        timeout: 35000  // Updated to 30s + 5s buffer = 35s
+        params: { timeout: 10 },
+        timeout: 15000  // 10s + 5s buffer = 15s
       });
     });
 
@@ -74,7 +74,7 @@ describe('ApiClient', () => {
       expect(bufferMs).toBe(5000);
 
       // Verify client timeout doesn't waste too much time
-      expect(clientTimeout).toBeLessThan(40000); // Should be well under 40s
+      expect(clientTimeout).toBeLessThan(20000); // Should be well under 20s (10s server + 5s buffer = 15s)
     });
 
     test('returns job on success', async () => {

@@ -1,5 +1,7 @@
 const ApiClient = require('./api-client');
 const Executor = require('./executor');
+const ProgressThrottle = require('./progress-throttle');
+const ErrorWindow = require('./error-window');
 const config = require('./config');
 const loggingConfig = require('./logging/config');
 const logger = require('./logger');
@@ -10,7 +12,6 @@ const TIMEOUTS = {
   SHUTDOWN_DELAY_MS: 500, // Delay before shutdown
   ERROR_RETRY_DELAY_MS: 5000, // 5 seconds retry delay after errors
   HEARTBEAT_INTERVAL_MS: 20000, // 20 seconds for heartbeat
-  PROGRESS_THROTTLE_MS: 100, // 100ms throttle (max 10 progress updates per second)
   MIN_REQUEST_INTERVAL_MS: 1000, // Minimum 1 second between API requests
 };
 
@@ -27,12 +28,14 @@ class RalphAgent {
     this.jobStartTime = null; // Track when job started for elapsed time
 
     // Rate limiting state
-    this.consecutiveErrors = 0;
     this.lastRequestTime = 0;
     this.minRequestInterval = TIMEOUTS.MIN_REQUEST_INTERVAL_MS;
 
-    // Progress throttling state
-    this.lastProgressUpdate = 0;
+    // Time-window based error tracking for circuit breaker
+    this.errorWindow = new ErrorWindow();
+
+    // Adaptive progress throttling
+    this.progressThrottle = new ProgressThrottle();
   }
 
   /**
@@ -103,11 +106,10 @@ class RalphAgent {
         }
         this.lastRequestTime = Date.now();
 
-        // Check for next job (long polling - server waits up to 30s)
+        // Check for next job (long polling - server waits up to 10s)
         const job = await this.apiClient.getNextJob();
 
-        // Reset error counter on successful API call
-        this.consecutiveErrors = 0;
+        // Note: Successful API call (error window handles its own cleanup)
 
         if (job) {
           await this.processJob(job);
@@ -118,21 +120,25 @@ class RalphAgent {
           await this.sleep(1000); // 1s minimum between polls
         }
       } catch (error) {
-        this.consecutiveErrors++;
-        logger.error(`Error in poll loop (consecutive: ${this.consecutiveErrors})`, error.message);
+        // Record error in time window for circuit breaker
+        this.errorWindow.addError();
+        const errorCount = this.errorWindow.getErrorCount();
 
-        // Exponential backoff: 5s, 10s, 20s, 40s, max 60s
+        logger.error(`Error in poll loop (${errorCount} errors in last 60s)`, error.message);
+
+        // Exponential backoff based on recent error count: 5s, 10s, 20s, 40s, max 60s
         const backoffTime = Math.min(
-          TIMEOUTS.ERROR_RETRY_DELAY_MS * Math.pow(2, this.consecutiveErrors - 1),
+          TIMEOUTS.ERROR_RETRY_DELAY_MS * Math.pow(2, Math.min(errorCount - 1, 4)),
           60000
         );
 
         logger.info(`Backing off for ${backoffTime}ms before retry`);
         await this.sleep(backoffTime);
 
-        // Circuit breaker: Stop if too many consecutive errors
-        if (this.consecutiveErrors >= 10) {
-          logger.error('Too many consecutive errors (10+), shutting down');
+        // Circuit breaker: Stop if error rate exceeds 50% over last 60 seconds
+        if (this.errorWindow.shouldShutdown()) {
+          logger.error('Error rate >50% in last 60 seconds, shutting down for safety');
+          logger.error(`Total errors: ${errorCount} (threshold based on 5s request interval)`);
           await this.stop();
         }
       }
@@ -180,17 +186,19 @@ class RalphAgent {
       this.startHeartbeat(job.id);
 
       // Reset progress throttle for new job
-      this.lastProgressUpdate = 0;
+      this.progressThrottle = new ProgressThrottle();
 
       // Execute the job with progress callback
       logger.info('Beginning job execution...');
       const result = await this.executor.execute(job, async (chunk) => {
-        // Throttle progress updates to prevent flooding (max 10 updates/sec)
-        const now = Date.now();
-        if (now - this.lastProgressUpdate < TIMEOUTS.PROGRESS_THROTTLE_MS) {
+        // Adaptive throttling: adjusts based on update rate
+        // High rate (>20/sec): 500ms throttle, Medium (5-20/sec): 200ms, Low (<5/sec): 100ms
+        if (this.progressThrottle.shouldThrottle()) {
           return; // Skip this update
         }
-        this.lastProgressUpdate = now;
+
+        // Record this update for rate tracking
+        this.progressThrottle.recordUpdate();
 
         // Send progress update to server (best-effort, don't fail job on error)
         try {
