@@ -319,7 +319,7 @@ class ClaudeRunner {
       // Use stdin to pass prompt - avoids shell injection
       // Use stream-json format for structured progress events
       logger.info('Spawning Claude CLI process with stream-json output');
-      const claude = spawn('claude', ['-p', '--output-format', 'stream-json', '--permission-mode', 'acceptEdits', '--verbose'], {
+      const claude = spawn('claude', ['-p', '--output-format', 'stream-json', '--include-partial-messages', '--permission-mode', 'acceptEdits', '--verbose'], {
         cwd: cwd,
         shell: false,
         env: this.getSanitizedEnv()
@@ -523,7 +523,7 @@ class ClaudeRunner {
         .catch(err => logger.warn(`Failed to send progress to API: ${err.message}`));
     }
 
-    const claudeProcess = spawn('claude', ['-p', '--output-format', 'stream-json', '--permission-mode', 'acceptEdits', '--verbose'], {
+    const claudeProcess = spawn('claude', ['-p', '--output-format', 'stream-json', '--include-partial-messages', '--permission-mode', 'acceptEdits', '--verbose'], {
       cwd: worktreePath,
       shell: false,
       env: this.getSanitizedEnv()
