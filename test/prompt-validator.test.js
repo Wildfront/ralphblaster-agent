@@ -1,6 +1,20 @@
 const { validatePrompt } = require('../src/executor/prompt-validator');
 
 describe('Prompt Validator', () => {
+  let consoleErrorSpy;
+
+  beforeEach(() => {
+    // Suppress console.error for validation error messages during tests
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    // Restore console.error
+    if (consoleErrorSpy) {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
   describe('validatePrompt - Valid prompts', () => {
     test('should accept a simple valid prompt', () => {
       expect(() => validatePrompt('Hello, please help me with this task')).not.toThrow();

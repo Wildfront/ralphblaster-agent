@@ -4,6 +4,7 @@
 
 describe('Logging Config', () => {
   let originalEnv;
+  let consoleWarnSpy;
 
   beforeEach(() => {
     // Save original environment
@@ -11,11 +12,19 @@ describe('Logging Config', () => {
 
     // Clear module cache to allow re-requiring with different env
     jest.resetModules();
+
+    // Suppress console.warn for deprecation warnings during tests
+    consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     // Restore original environment
     process.env = originalEnv;
+
+    // Restore console.warn
+    if (consoleWarnSpy) {
+      consoleWarnSpy.mockRestore();
+    }
   });
 
   describe('Default values', () => {

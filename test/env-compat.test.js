@@ -6,6 +6,7 @@ const { getEnv, getEnvBoolean, getEnvInt, getDeprecatedVarsInUse, clearDeprecati
 
 describe('Environment Variable Backward Compatibility', () => {
   let originalEnv;
+  let consoleWarnSpy;
 
   beforeEach(() => {
     // Save original environment
@@ -20,11 +21,17 @@ describe('Environment Variable Backward Compatibility', () => {
 
     // Clear deprecation warnings tracking
     clearDeprecationWarnings();
+
+    // Suppress console.warn for deprecation warnings during tests
+    consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     // Restore original environment
     process.env = originalEnv;
+
+    // Restore console.warn
+    consoleWarnSpy.mockRestore();
   });
 
   describe('getEnv', () => {

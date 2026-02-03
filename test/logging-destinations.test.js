@@ -387,7 +387,7 @@ describe('ApiDestination', () => {
     }).toThrow('jobId');
   });
 
-  test('constructor creates batcher with config', () => {
+  test('constructor creates batcher with config', async () => {
     const destination = new ApiDestination({
       apiClient: mockApiClient,
       jobId: 123,
@@ -401,6 +401,8 @@ describe('ApiDestination', () => {
     expect(destination.maxBatchSize).toBe(20);
     expect(destination.flushInterval).toBe(5000);
     expect(destination.useBatchSend).toBe(false);
+
+    await destination.close();
   });
 
   test('write() delegates to batcher', async () => {
@@ -416,6 +418,8 @@ describe('ApiDestination', () => {
 
     expect(writeSpy).toHaveBeenCalledWith('info', 'test message', { key: 'value' });
     writeSpy.mockRestore();
+
+    await destination.close();
   });
 
   test('flush() delegates to batcher', async () => {
@@ -431,6 +435,8 @@ describe('ApiDestination', () => {
 
     expect(flushSpy).toHaveBeenCalled();
     flushSpy.mockRestore();
+
+    await destination.close();
   });
 
   test('close() calls batcher shutdown', async () => {
@@ -461,6 +467,8 @@ describe('ApiDestination', () => {
     await destination.write('info', 'message 2');
 
     expect(destination.getBufferSize()).toBe(2);
+
+    await destination.close();
   });
 });
 
