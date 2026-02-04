@@ -24,7 +24,7 @@ class InitCommand {
       }
 
       // Get API URL from environment or use default
-      const apiUrl = process.env.RALPHBLASTER_API_URL || 'https://hq.ralphblaster.com';
+      const apiUrl = process.env.RALPHBLASTER_API_URL || 'https://app.ralphblaster.com';
 
       // Save credentials to ~/.ralphblasterrc
       this.configFileManager.update({
