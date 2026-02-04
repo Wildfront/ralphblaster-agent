@@ -80,7 +80,8 @@
       "Bash(claude --output-format stream-json --permission-mode acceptEdits)",
       "Bash(claude --output-format stream-json --permission-mode acceptEdits --verbose)",
       "Bash(bundle exec rspec:*)",
-      "Bash(npm unpublish:*)"
+      "Bash(npm unpublish:*)",
+      "Bash(npm version:*)"
     ]
   }
 }
