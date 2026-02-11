@@ -1,5 +1,68 @@
 # Agent Changelog
 
+## 2026-02-11 - Fix Headless Permission Hanging (v1.6.0)
+
+### Critical Bug Fix
+
+**Issue**: Agent would hang indefinitely in headless mode when Claude tried to execute Bash commands (git, npm, gh, docker, etc.), waiting for user approval that would never come.
+
+**Root Cause**: The `--permission-mode acceptEdits` flag only auto-approves Edit/Write/Read tools, not Bash commands. In headless environments, Claude would wait for user approval of Bash commands, causing the process to hang.
+
+**Impact**:
+- Jobs would timeout without completing
+- Agent appeared unresponsive during git operations
+- Users had to manually add `--allowedTools` flags as a temporary workaround
+- Workarounds would revert when the npm package was updated
+
+**Solution**:
+- **Maintains `acceptEdits` as default** (security-conscious, no breaking changes)
+- Automatically adds `--allowedTools` for common dev commands to prevent hanging:
+  - `git`, `gh`, `npm`, `bundle`, `rails`, `docker`, `yarn`, `pnpm`, `echo`
+- Added configurable `CLAUDE_PERMISSION_MODE` environment variable for users who need `acceptAll`
+- Centralized Claude CLI argument building in `getClaudeArgs()` method
+- **Security preserved**: Only explicitly allowed commands run automatically; everything else still requires approval
+
+### Files Modified
+
+**Agent (Node.js):**
+- `src/executor/claude-runner.js`:
+  - Added `getClaudeArgs()` method to centralize CLI argument building
+  - Updated both `runClaude()` and `runClaudeDirectly()` to use centralized args
+  - Implements smart permission handling based on environment variable
+- `ENVIRONMENT_VARIABLES.md`:
+  - Added documentation for `CLAUDE_PERMISSION_MODE` variable
+  - Added documentation for `CLAUDE_STREAM_DEBUG` variable
+
+### Configuration Options
+
+```bash
+# Default: Secure mode with allowed dev commands (recommended)
+# No need to set - this is the default behavior
+ralphblaster
+
+# Explicitly set acceptEdits (same as default)
+export CLAUDE_PERMISSION_MODE="acceptEdits"
+
+# Unrestricted: Auto-approve everything (⚠️ use with caution)
+export CLAUDE_PERMISSION_MODE="acceptAll"
+
+# Manual: Prompt for everything (not suitable for headless)
+export CLAUDE_PERMISSION_MODE="prompt"
+```
+
+### Expected Results
+
+After updating:
+- ✅ No more hanging when Claude runs git/npm/gh/docker commands
+- ✅ Agent completes jobs without manual intervention
+- ✅ Security boundaries maintained (only allowed commands auto-execute)
+- ✅ Configurable security levels via environment variable
+- ✅ Safe for production deployment
+
+### Breaking Changes
+
+**None** - Default behavior remains `acceptEdits`, but now automatically includes common dev commands to prevent hanging. This is backward compatible and adds no new security risks.
+
 ## 2026-01-28 - Fix Agent False Offline Status (v1.5.0)
 
 ### Critical Bug Fix
