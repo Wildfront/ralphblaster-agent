@@ -240,6 +240,48 @@ class ClaudeRunner {
   }
 
   /**
+   * Build Claude CLI arguments with appropriate permissions
+   * @returns {Array} Claude CLI arguments
+   */
+  getClaudeArgs() {
+    const args = [
+      '-p',
+      '--output-format', 'stream-json',
+      '--include-partial-messages',
+      '--verbose'
+    ];
+
+    // Use environment variable to control permission mode (default: acceptEdits with safe commands)
+    const permissionMode = process.env.CLAUDE_PERMISSION_MODE || 'acceptEdits';
+    args.push('--permission-mode', permissionMode);
+
+    // For acceptEdits mode, add explicit tool allowances for common dev commands
+    // This prevents hanging when Claude needs to run git, npm, etc in headless mode
+    // while maintaining security boundaries (only approved commands are auto-executed)
+    if (permissionMode === 'acceptEdits') {
+      const allowedBashCommands = [
+        'git ',
+        'gh ',
+        'npm ',
+        'bundle ',
+        'rails ',
+        'docker ',
+        'yarn ',
+        'pnpm ',
+        'echo '  // For terminal bell notifications
+      ];
+
+      for (const cmd of allowedBashCommands) {
+        args.push('--allowedTools', `Bash(${cmd})`);
+      }
+    }
+    // If acceptAll is explicitly set, no additional tool restrictions needed
+    // User has explicitly opted into unrestricted execution
+
+    return args;
+  }
+
+  /**
    * Get sanitized environment variables for Claude execution
    * @returns {Object} Sanitized environment object
    */
@@ -319,7 +361,7 @@ class ClaudeRunner {
       // Use stdin to pass prompt - avoids shell injection
       // Use stream-json format for structured progress events
       logger.info('Spawning Claude CLI process with stream-json output');
-      const claude = spawn('claude', ['-p', '--output-format', 'stream-json', '--include-partial-messages', '--permission-mode', 'acceptEdits', '--verbose'], {
+      const claude = spawn('claude', this.getClaudeArgs(), {
         cwd: cwd,
         shell: false,
         env: this.getSanitizedEnv()
@@ -523,7 +565,7 @@ class ClaudeRunner {
         .catch(err => logger.warn(`Failed to send progress to API: ${err.message}`));
     }
 
-    const claudeProcess = spawn('claude', ['-p', '--output-format', 'stream-json', '--include-partial-messages', '--permission-mode', 'acceptEdits', '--verbose'], {
+    const claudeProcess = spawn('claude', this.getClaudeArgs(), {
       cwd: worktreePath,
       shell: false,
       env: this.getSanitizedEnv()
