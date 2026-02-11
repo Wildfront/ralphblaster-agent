@@ -82,7 +82,11 @@
       "Bash(bundle exec rspec:*)",
       "Bash(npm unpublish:*)",
       "Bash(npm version:*)",
-      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch:*)"
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch:*)",
+      "Bash(git show-ref:*)",
+      "Bash(git prune:*)",
+      "Bash(git fsck:*)",
+      "Bash(git push:*)"
     ]
   }
 }
