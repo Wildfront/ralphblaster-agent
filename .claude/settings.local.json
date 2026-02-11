@@ -81,7 +81,8 @@
       "Bash(claude --output-format stream-json --permission-mode acceptEdits --verbose)",
       "Bash(bundle exec rspec:*)",
       "Bash(npm unpublish:*)",
-      "Bash(npm version:*)"
+      "Bash(npm version:*)",
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch:*)"
     ]
   }
 }
