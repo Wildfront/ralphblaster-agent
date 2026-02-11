@@ -60,6 +60,59 @@ Colon-separated list of allowed base paths for project directories. Provides add
 export RALPHBLASTER_ALLOWED_PATHS="/Users/me/projects:/home/me/work"
 ```
 
+## Claude Execution Configuration
+
+### CLAUDE_PERMISSION_MODE
+**Default:** `acceptEdits` (with auto-allowed dev commands)
+**Valid values:** `acceptEdits`, `acceptAll`, `prompt`
+
+Controls Claude Code's permission behavior in headless mode. This determines which tools require user approval.
+
+- **`acceptEdits` (default, recommended)**: Auto-approve Edit/Write/Read tools + explicitly allowed Bash commands only
+  - Automatically allows: git, gh, npm, bundle, rails, docker, yarn, pnpm, echo
+  - Blocks: Anything else (rm, curl, wget, etc.)
+  - Best balance of security and automation
+
+- **`acceptAll`**: Auto-approve ALL tools without restrictions
+  - ⚠️ **Use with caution** - Claude can execute ANY command
+  - Only use if you fully trust the PRD source and understand the risks
+  - Recommended only for isolated test environments
+
+- **`prompt`**: Prompt for all actions
+  - ❌ Not suitable for headless/automated mode (will hang)
+  - Only use for interactive debugging
+
+**How It Works:**
+When using `acceptEdits` (default), the agent automatically adds `--allowedTools` flags for common development commands. This prevents hanging when Claude needs to run `git commit`, `npm install`, etc., while maintaining security boundaries.
+
+**Example:**
+```bash
+# Use default safe mode (recommended for production)
+# No need to set - acceptEdits with allowed commands is the default
+ralphblaster
+
+# Explicitly set acceptEdits (same as default)
+export CLAUDE_PERMISSION_MODE="acceptEdits"
+
+# Use unrestricted mode (⚠️ use with caution)
+export CLAUDE_PERMISSION_MODE="acceptAll"
+```
+
+**⚠️ Security Considerations:**
+- **Default (`acceptEdits`)**: Claude can only run approved dev commands - provides good security while preventing hangs
+- **`acceptAll`**: Claude can run ANY command - use only in isolated/trusted environments
+- Never use `prompt` in automated/headless environments
+
+### CLAUDE_STREAM_DEBUG
+**Default:** `true`
+
+Enable or disable debug logging for Claude's stream-json output. Set to `false` to reduce verbosity.
+
+**Example:**
+```bash
+export CLAUDE_STREAM_DEBUG="false"
+```
+
 ## Logging Configuration
 
 ### RALPHBLASTER_LOG_LEVEL
