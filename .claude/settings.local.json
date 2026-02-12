@@ -86,7 +86,11 @@
       "Bash(git show-ref:*)",
       "Bash(git prune:*)",
       "Bash(git fsck:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(npm config get:*)",
+      "Bash(npx:*)",
+      "Bash(npx ralphblaster-agent:*)",
+      "Bash(bin/rails runner:*)"
     ]
   }
 }
