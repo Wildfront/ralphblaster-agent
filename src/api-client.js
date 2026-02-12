@@ -304,9 +304,9 @@ class ApiClient {
    */
   async markJobRunning(jobId) {
     try {
-      await this.requestWithFallback('patch', `/jobs/${jobId}`, {
+      await this.requestWithRetry('patch', `/jobs/${jobId}`, {
         status: 'running'
-      });
+      }, null, 3);
       logger.info(`Job #${jobId} marked as running`);
     } catch (error) {
       logger.error(`Error marking job #${jobId} as running: ${error.message}`);
