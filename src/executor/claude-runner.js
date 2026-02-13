@@ -757,8 +757,16 @@ class ClaudeRunner {
             logger.warn('Claude output is empty! Stream-json events may not have been parsed correctly.');
           }
 
-          // Get branch name from worktree
-          const branchName = await this.gitHelper.getCurrentBranch(worktreePath);
+          // Get branch name from worktree (best-effort, non-critical)
+          let branchName = 'main'; // Default fallback
+          try {
+            branchName = await this.gitHelper.getCurrentBranch(worktreePath);
+          } catch (err) {
+            // Git command failed - could be various reasons (see git-helper stderr for details)
+            // Non-fatal: we'll use default branch name
+            logger.warn(`Could not determine branch name (${worktreePath}): ${err.message}`);
+            logger.debug(`Full git error: ${err.stack}`);
+          }
 
           resolve({
             output: output,

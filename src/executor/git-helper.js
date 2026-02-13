@@ -17,16 +17,23 @@ class GitHelper {
     return new Promise((resolve, reject) => {
       const git = spawn('git', args, { cwd });
       let output = '';
+      let stderr = ''; // Capture stderr
 
       git.stdout.on('data', (data) => {
         output += data.toString();
+      });
+
+      git.stderr.on('data', (data) => {
+        stderr += data.toString();
       });
 
       git.on('close', (code) => {
         if (code === 0) {
           resolve(output);
         } else {
-          reject(new Error(`Git command failed with code ${code}`));
+          // Include stderr in error message for better diagnostics
+          const errorMsg = stderr.trim() || `Git command failed with code ${code}`;
+          reject(new Error(errorMsg));
         }
       });
 
