@@ -102,7 +102,9 @@
       "mcp__render__list_logs",
       "mcp__render__get_service",
       "Bash(sudo npm uninstall:*)",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(npm start)",
+      "Bash(git mv:*)"
     ]
   }
 }
