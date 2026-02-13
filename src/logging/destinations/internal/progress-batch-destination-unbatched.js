@@ -1,4 +1,4 @@
-const BaseDestination = require('./base-destination');
+const BaseDestination = require('../base-destination');
 
 /**
  * ProgressBatchDestinationUnbatched - Sends progress updates to API

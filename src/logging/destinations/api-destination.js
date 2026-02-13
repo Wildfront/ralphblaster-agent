@@ -1,5 +1,5 @@
 const BatchedDestination = require('./batched-destination');
-const ApiDestinationUnbatched = require('./api-destination-unbatched');
+const ApiDestinationUnbatched = require('./internal/api-destination-unbatched');
 
 /**
  * ApiDestination - Sends logs to API with batching

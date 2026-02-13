@@ -4,7 +4,7 @@
  */
 
 const ApiDestination = require('../src/logging/destinations/api-destination');
-const ApiDestinationUnbatched = require('../src/logging/destinations/api-destination-unbatched');
+const ApiDestinationUnbatched = require('../src/logging/destinations/internal/api-destination-unbatched');
 
 // Mock API client
 class MockApiClient {

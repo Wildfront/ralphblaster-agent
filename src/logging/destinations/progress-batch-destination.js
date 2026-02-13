@@ -1,5 +1,5 @@
 const BatchedDestination = require('./batched-destination');
-const ProgressBatchDestinationUnbatched = require('./progress-batch-destination-unbatched');
+const ProgressBatchDestinationUnbatched = require('./internal/progress-batch-destination-unbatched');
 
 /**
  * ProgressBatchDestination - Sends progress updates to API with batching
