@@ -621,7 +621,8 @@ class ApiClient {
       return;
     }
 
-    // Check metadata size to prevent sending excessively large payloads
+    // Check metadata size and serializability BEFORE sanitization
+    // This ensures we reject obviously bad data early
     try {
       const metadataStr = JSON.stringify(metadata);
       if (metadataStr.length > 10000) {
@@ -633,11 +634,35 @@ class ApiClient {
       return;
     }
 
+    // Sanitize metadata to prevent XSS and prototype pollution
+    const sanitized = Object.fromEntries(
+      Object.entries(metadata)
+        // Filter out prototype pollution keys
+        .filter(([k]) => typeof k === 'string' && !k.startsWith('__') && k !== 'constructor' && k !== 'prototype')
+        // Limit value lengths and ensure safe types
+        .map(([k, v]) => {
+          if (typeof v === 'string') {
+            return [k, v.slice(0, 1000)]; // Limit string values to 1000 chars
+          } else if (typeof v === 'number' || typeof v === 'boolean' || v === null) {
+            return [k, v]; // Allow primitives
+          } else if (typeof v === 'object' && v !== null) {
+            // For nested objects, stringify and limit length
+            try {
+              return [k, JSON.stringify(v).slice(0, 1000)];
+            } catch {
+              return [k, String(v).slice(0, 1000)];
+            }
+          } else {
+            return [k, String(v).slice(0, 1000)]; // Convert and limit other types
+          }
+        })
+    );
+
     try {
       await this.requestWithFallback('patch', `/jobs/${jobId}/metadata`, {
-        metadata: metadata
+        metadata: sanitized
       });
-      logger.debug(`Metadata updated for job #${jobId}`, metadata);
+      logger.debug(`Metadata updated for job #${jobId}`, sanitized);
     } catch (error) {
       logger.warn(`Error updating metadata for job #${jobId}: ${error.message}`);
       // Don't throw - metadata updates are best-effort
