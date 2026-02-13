@@ -41,6 +41,8 @@ class ClaudeRunner {
     this.capturedStderr = '';
     // Debug mode enabled by default, disable with CLAUDE_STREAM_DEBUG=false
     this.debugStream = process.env.CLAUDE_STREAM_DEBUG !== 'false';
+    // Track recent progress messages to deduplicate within 100ms window
+    this.recentProgressMessages = new Map(); // text -> timestamp
   }
 
   /**
@@ -420,6 +422,27 @@ class ClaudeRunner {
             // Send progress updates for all event types
             const progressText = this.formatStreamEvent(event);
             if (progressText) {
+              // Deduplicate: Skip if we sent this exact text within last 100ms
+              const lastSentTime = this.recentProgressMessages.get(progressText);
+              const now = Date.now();
+
+              if (lastSentTime && (now - lastSentTime) < 100) {
+                logger.debug(`Skipping duplicate progress within ${now - lastSentTime}ms: ${progressText.slice(0, 80)}`);
+                continue; // Skip this duplicate
+              }
+
+              // Track this message
+              this.recentProgressMessages.set(progressText, now);
+
+              // Clean up old entries (older than 5 seconds) to prevent memory leak
+              if (this.recentProgressMessages.size > 100) {
+                for (const [text, timestamp] of this.recentProgressMessages.entries()) {
+                  if (now - timestamp > 5000) {
+                    this.recentProgressMessages.delete(text);
+                  }
+                }
+              }
+
               // Write to stdout for terminal visibility
               process.stdout.write(progressText);
 
@@ -632,6 +655,27 @@ class ClaudeRunner {
             // Send progress updates for all event types
             const progressText = this.formatStreamEvent(event);
             if (progressText) {
+              // Deduplicate: Skip if we sent this exact text within last 100ms
+              const lastSentTime = this.recentProgressMessages.get(progressText);
+              const now = Date.now();
+
+              if (lastSentTime && (now - lastSentTime) < 100) {
+                logger.debug(`Skipping duplicate progress within ${now - lastSentTime}ms: ${progressText.slice(0, 80)}`);
+                continue; // Skip this duplicate
+              }
+
+              // Track this message
+              this.recentProgressMessages.set(progressText, now);
+
+              // Clean up old entries (older than 5 seconds) to prevent memory leak
+              if (this.recentProgressMessages.size > 100) {
+                for (const [text, timestamp] of this.recentProgressMessages.entries()) {
+                  if (now - timestamp > 5000) {
+                    this.recentProgressMessages.delete(text);
+                  }
+                }
+              }
+
               // Write to stdout for terminal visibility
               process.stdout.write(progressText);
 
