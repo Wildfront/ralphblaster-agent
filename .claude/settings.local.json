@@ -100,7 +100,9 @@
       "WebFetch(domain:render.com)",
       "mcp__render__list_postgres_instances",
       "mcp__render__list_logs",
-      "mcp__render__get_service"
+      "mcp__render__get_service",
+      "Bash(sudo npm uninstall:*)",
+      "Bash(kill:*)"
     ]
   }
 }
