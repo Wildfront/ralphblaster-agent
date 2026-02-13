@@ -30,7 +30,7 @@ describe('Error Handler', () => {
       const result = categorizeError(error, stderr, 1);
 
       expect(result.category).toBe('not_authenticated');
-      expect(result.userMessage).toBe('Claude CLI is not authenticated. Please run "claude auth"');
+      expect(result.userMessage).toBe('Claude CLI is not authenticated. Please run "/login" in Claude Code to authenticate');
     });
 
     test('categorizes authentication failed message', () => {
@@ -47,6 +47,26 @@ describe('Error Handler', () => {
       const stderr = 'Please log in to continue';
 
       const result = categorizeError(error, stderr, 1);
+
+      expect(result.category).toBe('not_authenticated');
+    });
+
+    test('categorizes authentication error in stdout', () => {
+      const error = new Error('Auth error');
+      const stderr = '';
+      const stdout = 'Not logged in · Please run /login';
+
+      const result = categorizeError(error, stderr, 1, stdout);
+
+      expect(result.category).toBe('not_authenticated');
+    });
+
+    test('categorizes "not logged in" message in stdout', () => {
+      const error = new Error('Auth error');
+      const stderr = '';
+      const stdout = 'Not logged in\nPlease authenticate';
+
+      const result = categorizeError(error, stderr, 1, stdout);
 
       expect(result.category).toBe('not_authenticated');
     });

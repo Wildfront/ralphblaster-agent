@@ -90,7 +90,17 @@
       "Bash(npm config get:*)",
       "Bash(npx:*)",
       "Bash(npx ralphblaster-agent:*)",
-      "Bash(bin/rails runner:*)"
+      "Bash(bin/rails runner:*)",
+      "Bash(claude mcp:*)",
+      "Bash(source:*)",
+      "Bash(ssh srv-d5lgmqbe5dus73dpb6d0@ssh.oregon.render.com \"cd /opt/render/project/src && bin/rails runner \"\"job = RbJob.find\\(196\\); puts ''=== JOB ERROR ===''; puts job.error; puts ''=== ERROR DETAILS ===''; puts job.error_details; puts ''=== ERROR CATEGORY ===''; puts job.error_category\"\"\")",
+      "Bash(rails runner:*)",
+      "WebSearch",
+      "WebFetch(domain:mcp.render.com)",
+      "WebFetch(domain:render.com)",
+      "mcp__render__list_postgres_instances",
+      "mcp__render__list_logs",
+      "mcp__render__get_service"
     ]
   }
 }

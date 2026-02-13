@@ -473,10 +473,11 @@ class ClaudeRunner {
           resolve(stdout);
         } else {
           logger.error(`Claude CLI exited with non-zero code ${code}`);
+          logger.error('Last 1000 chars of stdout:', stdout.slice(-1000));
           logger.error('Last 1000 chars of stderr:', stderr.slice(-1000));
 
           const baseError = new Error(`Claude CLI failed with exit code ${code}: ${stderr}`);
-          const errorInfo = this.errorHandler.categorizeError(baseError, stderr, code);
+          const errorInfo = this.errorHandler.categorizeError(baseError, stderr, code, stdout);
 
           logger.error('Error categorization:', {
             category: errorInfo.category,
@@ -503,7 +504,7 @@ class ClaudeRunner {
           syscall: error.syscall
         });
 
-        const errorInfo = this.errorHandler.categorizeError(error, stderr, null);
+        const errorInfo = this.errorHandler.categorizeError(error, stderr, null, stdout);
 
         logger.error('Spawn error categorization:', {
           category: errorInfo.category,
@@ -720,10 +721,12 @@ class ClaudeRunner {
           });
         } else {
           logger.error(`Claude failed with code ${code}`);
+          logger.error('Last 1000 chars of output:', output.slice(-1000));
+          logger.error('Last 1000 chars of errorOutput:', errorOutput.slice(-1000));
 
-          // Use existing error categorization
+          // Use existing error categorization (errorOutput is stderr, output is stdout)
           const baseError = new Error(`Claude CLI failed with exit code ${code}: ${errorOutput}`);
-          const errorInfo = this.errorHandler.categorizeError(baseError, errorOutput, code);
+          const errorInfo = this.errorHandler.categorizeError(baseError, errorOutput, code, output);
 
           // Create enriched error (same pattern as existing runClaude)
           const enrichedError = new Error(errorInfo.userMessage);
@@ -740,8 +743,8 @@ class ClaudeRunner {
         this.currentProcess = null;
         logger.error(`Failed to spawn Claude CLI: ${err.message}`);
 
-        // Use existing error categorization
-        const errorInfo = this.errorHandler.categorizeError(err, errorOutput, null);
+        // Use existing error categorization (errorOutput is stderr, output is stdout)
+        const errorInfo = this.errorHandler.categorizeError(err, errorOutput, null, output);
 
         const enrichedError = new Error(errorInfo.userMessage);
         enrichedError.category = errorInfo.category;

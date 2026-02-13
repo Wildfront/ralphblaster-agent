@@ -1,5 +1,38 @@
 # Agent Changelog
 
+## 2026-02-13 - Fix Authentication Detection (v0.1.5)
+
+### Bug Fix
+
+**Issue**: Agent failed to detect when Claude CLI was logged out, showing generic "Claude CLI execution failed with exit code 1" instead of helpful authentication message.
+
+**Root Cause**: Claude CLI outputs "Not logged in · Please run /login" to **stdout** instead of stderr, but the error handler only checked stderr for authentication patterns.
+
+**Impact**:
+- Users saw unhelpful error messages when logged out
+- No guidance to run /login to fix the issue
+- Made debugging authentication issues difficult
+
+**Solution**:
+- Modified `categorizeError()` to check both stdout and stderr for authentication patterns
+- Added "not logged in" pattern to detection (in addition to existing patterns)
+- Updated all calls to `categorizeError()` in claude-runner.js to pass stdout
+- Added comprehensive tests for stdout authentication detection
+
+### Files Modified
+
+**Agent (Node.js):**
+- `src/executor/error-handler.js`:
+  - Added 4th parameter `stdout` to `categorizeError()`
+  - Combined stdout and stderr for pattern matching
+  - Added "not logged in" pattern detection
+- `src/executor/claude-runner.js`:
+  - Updated all `categorizeError()` calls to pass stdout
+  - Added stdout logging for better debugging
+- `test/error-handler.test.js` & `test/executor-error-categorization.test.js`:
+  - Added tests for stdout authentication detection
+  - Updated expected message format
+
 ## 2026-02-11 - Fix Headless Permission Hanging (v1.6.0)
 
 ### Critical Bug Fix

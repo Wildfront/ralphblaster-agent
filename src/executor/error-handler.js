@@ -5,35 +5,46 @@ const logger = require('../logger');
  * @param {Error} error - The error object
  * @param {string} stderr - Standard error output
  * @param {number} exitCode - Process exit code
+ * @param {string} stdout - Standard output (optional, for checking auth messages)
  * @returns {Object} Object with category, userMessage, and technicalDetails
  */
-function categorizeError(error, stderr = '', exitCode = null) {
+function categorizeError(error, stderr = '', exitCode = null, stdout = '') {
   let category = 'unknown';
   let userMessage = error.message || String(error);
-  let technicalDetails = `Error: ${error.message}\nStderr: ${stderr}\nExit Code: ${exitCode}`;
+  let technicalDetails = `Error: ${error.message}\nStdout: ${stdout}\nStderr: ${stderr}\nExit Code: ${exitCode}`;
+
+  // Combine stdout and stderr for pattern matching (Claude CLI outputs some errors to stdout)
+  const combinedOutput = `${stdout} ${stderr}`;
 
   // Check for Claude CLI not installed
   if (error.code === 'ENOENT') {
     category = 'claude_not_installed';
     userMessage = 'Claude Code CLI is not installed or not found in PATH';
   }
-  // Check for authentication issues
-  else if (stderr.match(/not authenticated/i) || stderr.match(/authentication failed/i) || stderr.match(/please log in/i)) {
+  // Check for authentication issues (check both stdout and stderr)
+  else if (
+    combinedOutput.match(/not authenticated/i) ||
+    combinedOutput.match(/not logged in/i) ||
+    combinedOutput.match(/authentication failed/i) ||
+    combinedOutput.match(/please log in/i) ||
+    combinedOutput.match(/invalid api key/i) ||
+    combinedOutput.match(/\/login/i)
+  ) {
     category = 'not_authenticated';
-    userMessage = 'Claude CLI is not authenticated. Please run "claude auth"';
+    userMessage = 'Claude CLI is not authenticated. Please run "/login" in Claude Code to authenticate';
   }
   // Check for token limit exceeded
-  else if (stderr.match(/token limit exceeded/i) || stderr.match(/quota exceeded/i) || stderr.match(/insufficient credits/i)) {
+  else if (combinedOutput.match(/token limit exceeded/i) || combinedOutput.match(/quota exceeded/i) || combinedOutput.match(/insufficient credits/i)) {
     category = 'out_of_tokens';
     userMessage = 'Claude API token limit has been exceeded';
   }
   // Check for rate limiting
-  else if (stderr.match(/rate limit/i) || stderr.match(/too many requests/i) || stderr.match(/429/)) {
+  else if (combinedOutput.match(/rate limit/i) || combinedOutput.match(/too many requests/i) || combinedOutput.match(/429/)) {
     category = 'rate_limited';
     userMessage = 'Claude API rate limit reached. Please wait before retrying';
   }
   // Check for permission denied
-  else if (stderr.match(/permission denied/i) || stderr.match(/EACCES/i) || error.code === 'EACCES') {
+  else if (combinedOutput.match(/permission denied/i) || combinedOutput.match(/EACCES/i) || error.code === 'EACCES') {
     category = 'permission_denied';
     userMessage = 'Permission denied accessing project files or directories';
   }
