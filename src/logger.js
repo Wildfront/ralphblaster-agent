@@ -24,13 +24,16 @@ const logManager = new LogManager([consoleDestination], {
  */
 function log(level, message, data = null) {
   // Delegate to LogManager (non-blocking)
-  logManager[level](message, data || {}).catch(() => {
-    // Silently handle errors to prevent cascading failures
+  logManager[level](message, data || {}).catch((err) => {
+    // Fallback to console logging if LogManager fails
+    console.error(`[Logger Failure] ${level}: ${message}`, err.message);
   });
 
   // For error level, trigger immediate flush
   if (level === 'error') {
-    logManager.flush().catch(() => {}); // Best-effort immediate flush
+    logManager.flush().catch((err) => {
+      console.error('[Logger Flush Failure]', err.message);
+    });
   }
 }
 

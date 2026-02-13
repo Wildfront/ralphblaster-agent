@@ -434,13 +434,15 @@ class ClaudeRunner {
               // Track this message
               this.recentProgressMessages.set(progressText, now);
 
-              // Clean up old entries (older than 5 seconds) to prevent memory leak
-              if (this.recentProgressMessages.size > 100) {
-                for (const [text, timestamp] of this.recentProgressMessages.entries()) {
-                  if (now - timestamp > 5000) {
-                    this.recentProgressMessages.delete(text);
-                  }
-                }
+              // Clean up old entries (older than 10 seconds) to prevent memory leak
+              // Always cleanup when size exceeds 50 to prevent unbounded growth
+              if (this.recentProgressMessages.size > 50) {
+                const cutoff = now - 10000;
+                this.recentProgressMessages = new Map(
+                  [...this.recentProgressMessages.entries()]
+                    .filter(([_, ts]) => ts > cutoff)
+                );
+                logger.debug(`Cleaned up progress map, new size: ${this.recentProgressMessages.size}`);
               }
 
               // Write to stdout for terminal visibility
