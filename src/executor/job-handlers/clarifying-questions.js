@@ -75,19 +75,10 @@ class ClarifyingQuestionsHandler {
       // 2. Uses ProgressParser for structured updates
       // 3. Forwards all chunks to terminal (let index.js handle throttling)
       const smartProgress = async (chunk) => {
-        // Send progress to API (best-effort, don't fail on errors)
-        if (this.apiClient) {
-          try {
-            await this.apiClient.sendProgress(job.id, chunk);
-          } catch (err) {
-            logger.debug(`Failed to send progress to API: ${err.message}`);
-          }
-        }
-
         // Process through ProgressParser for structured milestone updates
         await progressParser.processChunk(chunk);
 
-        // Forward all chunks to terminal (let index.js handle throttling)
+        // Forward to onProgress callback (which handles API sending with throttling)
         if (onProgress) {
           await onProgress(chunk);
         }

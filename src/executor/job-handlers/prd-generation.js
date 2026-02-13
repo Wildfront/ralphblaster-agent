@@ -74,25 +74,10 @@ class PrdGenerationHandler {
       // 2. Uses ProgressParser for structured updates
       // 3. Forwards all chunks to terminal (let index.js handle throttling)
       const smartProgress = async (chunk) => {
-        console.log('[DEBUG] smartProgress called with chunk length:', chunk?.length);
-        // Send progress to API (best-effort, don't fail on errors)
-        if (this.apiClient) {
-          console.log('[DEBUG] Calling apiClient.sendProgress');
-          try {
-            await this.apiClient.sendProgress(job.id, chunk);
-            console.log('[DEBUG] sendProgress succeeded');
-          } catch (err) {
-            console.error(`[DEBUG] Failed to send progress to API: ${err.message}`);
-            logger.debug(`Failed to send progress to API: ${err.message}`);
-          }
-        } else {
-          console.log('[DEBUG] apiClient is null!');
-        }
-
         // Process through ProgressParser for structured milestone updates
         await progressParser.processChunk(chunk);
 
-        // Forward all chunks to terminal (let index.js handle throttling)
+        // Forward to onProgress callback (which handles API sending with throttling)
         if (onProgress) {
           await onProgress(chunk);
         }
@@ -181,25 +166,10 @@ class PrdGenerationHandler {
       // 2. Uses ProgressParser for structured updates
       // 3. Forwards all chunks to terminal (let index.js handle throttling)
       const smartProgress = async (chunk) => {
-        console.log('[DEBUG] smartProgress called with chunk length:', chunk?.length);
-        // Send progress to API (best-effort, don't fail on errors)
-        if (this.apiClient) {
-          console.log('[DEBUG] Calling apiClient.sendProgress');
-          try {
-            await this.apiClient.sendProgress(job.id, chunk);
-            console.log('[DEBUG] sendProgress succeeded');
-          } catch (err) {
-            console.error(`[DEBUG] Failed to send progress to API: ${err.message}`);
-            logger.debug(`Failed to send progress to API: ${err.message}`);
-          }
-        } else {
-          console.log('[DEBUG] apiClient is null!');
-        }
-
         // Process through ProgressParser for structured milestone updates
         await progressParser.processChunk(chunk);
 
-        // Forward all chunks to terminal (let index.js handle throttling)
+        // Forward to onProgress callback (which handles API sending with throttling)
         if (onProgress) {
           await onProgress(chunk);
         }
